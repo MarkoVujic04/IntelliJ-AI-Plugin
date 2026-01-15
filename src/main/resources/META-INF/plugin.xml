@@ -27,5 +27,11 @@
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="MyToolWindow" factoryClass="com.markolukarami.copilotclone.MyToolWindowFactory"
                     icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+
+        <applicationConfigurable
+                parentId="tools"
+                id="com.markolukarami.aiplugin.settings"
+                displayName="AI Plugin"
+                instance="com.markolukarami.aiplugin.infrastructure.intellij.settings.AiSettingsConfigurable"/>
     </extensions>
 </idea-plugin>

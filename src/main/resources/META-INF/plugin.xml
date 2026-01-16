@@ -25,13 +25,13 @@
     <!-- Extensions defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="MyToolWindow" factoryClass="com.markolukarami.copilotclone.MyToolWindowFactory"
+        <toolWindow id="MyToolWindow" factoryClass="com.markolukarami.copilotclone.ui.AiToolWindowFactory"
                     icon="AllIcons.Toolwindows.ToolWindowPalette"/>
 
         <applicationConfigurable
                 parentId="tools"
-                id="com.markolukarami.aiplugin.settings"
+                id="com.markolukarami.copilotclone.frameworks.settings"
                 displayName="AI Plugin"
-                instance="com.markolukarami.aiplugin.infrastructure.intellij.settings.AiSettingsConfigurable"/>
+                instance="com.markolukarami.copilotclone.frameworks.settings.AiSettingsConfigurable"/>
     </extensions>
 </idea-plugin>

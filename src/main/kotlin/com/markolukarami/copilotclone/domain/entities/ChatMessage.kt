@@ -1,4 +1,4 @@
-package com.markolukarami.copilotclone.domain.model
+package com.markolukarami.copilotclone.domain.entities
 
 data class ChatMessage(
     var role: ChatRole,

@@ -25,8 +25,8 @@
     <!-- Extensions defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="MyToolWindow" factoryClass="com.markolukarami.copilotclone.ui.AiToolWindowFactory"
-                    icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+        <toolWindow id="Local LLM" factoryClass="com.markolukarami.copilotclone.ui.AiToolWindowFactory"
+                    icon="/META-INF/newlogo.png"/>
 
         <applicationConfigurable
                 parentId="tools"

@@ -1,9 +1,7 @@
-package com.markolukarami.aiplugin.frameworks.settings
-
+package com.markolukarami.copilotclone.frameworks.settings
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
 import com.intellij.ui.components.JBTextField
-import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
 import java.awt.BorderLayout
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout

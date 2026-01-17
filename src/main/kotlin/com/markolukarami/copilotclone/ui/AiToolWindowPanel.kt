@@ -1,5 +1,4 @@
-package com.markolukarami.aiplugin.frameworks.ui
-
+package com.markolukarami.copilotclone.ui
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -7,7 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
-import com.markolukarami.aiplugin.frameworks.ChatWiring
+import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.JButton
@@ -16,7 +15,7 @@ import javax.swing.JPanel
 
 class AiToolWindowPanel(private val project: Project) {
 
-    private val controller = ChatWiring.chatController()
+    private val controller = ChatWiring.chatController(project)
 
     private val outputArea = JBTextArea().apply {
         isEditable = false
@@ -51,6 +50,7 @@ class AiToolWindowPanel(private val project: Project) {
         sendButton.isEnabled = false
 
         append(text = "You: $text\n\n")
+        append("AI is thinking...\n\n")
 
         object : Task.Backgroundable(project, "Asking AI", false) {
             override fun run(indicator: ProgressIndicator) {
@@ -59,16 +59,9 @@ class AiToolWindowPanel(private val project: Project) {
                 val viewModels = controller.onUserMessage(text)
 
                 ApplicationManager.getApplication().invokeLater {
-                    viewModels.drop(1).forEach { vm ->
-                        append(vm.displayText + "\n")
-                    }
-                    sendButton.isEnabled = true
-                }
-            }
+                    val aiVM = viewModels.last()
+                    append("${aiVM.displayText}\n\n")
 
-            override fun onThrowable(error: Throwable) {
-                ApplicationManager.getApplication().invokeLater {
-                    append("Error: ${error.message ?: "Unknown error"}\n\n")
                     sendButton.isEnabled = true
                 }
             }

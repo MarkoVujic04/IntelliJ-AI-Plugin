@@ -1,5 +1,4 @@
-package com.markolukarami.aiplugin.frameworks.lmstudio
-
+package com.markolukarami.copilotclone.frameworks.llm
 import com.intellij.openapi.diagnostic.Logger
 import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatRole

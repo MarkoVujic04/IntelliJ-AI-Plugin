@@ -1,10 +1,10 @@
 package com.markolukarami.copilotclone.adapters.controllers
 
-import com.markolukarami.aiplugin.application.usecase.ChatUseCase
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
 import com.markolukarami.copilotclone.adapters.presentation.ChatViewModel
 import com.markolukarami.copilotclone.application.dto.SendChatCommand
 import com.markolukarami.copilotclone.application.dto.SendChatResult
+import com.markolukarami.copilotclone.application.usecase.ChatUseCase
 
 class ChatController (
     private val chatUseCase: ChatUseCase,

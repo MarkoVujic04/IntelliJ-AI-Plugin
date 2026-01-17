@@ -1,5 +1,4 @@
-package com.markolukarami.aiplugin.frameworks.lmstudio
-
+package com.markolukarami.copilotclone.frameworks.llm
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 

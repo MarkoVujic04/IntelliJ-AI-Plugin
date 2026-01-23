@@ -7,8 +7,6 @@ data class OpenAiChatRequest(
     val model: String,
     val messages: List<OpenAiMessage>,
     val temperature: Double? = 0.2,
-    @SerialName("max_tokens") val maxTokens: Int? = null,
-    val stream: Boolean? = false
 )
 
 @Serializable

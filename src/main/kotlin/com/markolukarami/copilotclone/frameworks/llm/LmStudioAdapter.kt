@@ -34,7 +34,6 @@ class LMStudioAdapter : ChatRepository {
             model = config.model,
             messages = messages.map { it.toOpenAi() },
             temperature = 0.2,
-            stream = false
         )
 
         val bodyStr = json.encodeToString(OpenAiChatRequest.serializer(), req)
@@ -55,9 +54,10 @@ class LMStudioAdapter : ChatRepository {
                 }
 
                 val parsed = json.decodeFromString(OpenAiChatResponse.serializer(), text)
-                return parsed.choices.firstOrNull()?.message?.content?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "Empty response from LLM."
+                val content = parsed.choices.firstOrNull()?.message?.content?.trim()
+
+                return content?.takeIf { it.isNotBlank() }
+                    ?: "Error: Empty response from LLM."
             }
         } catch (e: IOException) {
             log.warn("LLM connection error", e)

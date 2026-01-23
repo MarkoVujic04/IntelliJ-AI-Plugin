@@ -2,24 +2,41 @@ package com.markolukarami.copilotclone.adapters.controllers
 
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
 import com.markolukarami.copilotclone.adapters.presentation.ChatViewModel
+import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
+import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
 import com.markolukarami.copilotclone.application.dto.SendChatCommand
 import com.markolukarami.copilotclone.application.dto.SendChatResult
 import com.markolukarami.copilotclone.application.usecase.ChatUseCase
 
+data class ChatControllerResult(
+    val chatItems: List<ChatViewModel>,
+    val trace: TraceViewModel
+)
+
 class ChatController (
     private val chatUseCase: ChatUseCase,
-    private val presenter: ChatPresenter
+    private val chatPresenter: ChatPresenter,
+    private val tracePresenter: TracePresenter
 ) {
-    fun onUserMessage(userText: String): List<ChatViewModel> {
-        val trimmed = userText.trim()
-        if(trimmed.isBlank()) return emptyList()
+    fun onUserMessage(text: String): ChatControllerResult {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) {
+            return ChatControllerResult(
+                chatItems = emptyList(),
+                trace = TraceViewModel(lines = listOf("No Input"))
+            )
+        }
+
+        val userVm = chatPresenter.presentUser(trimmed)
 
         val result = chatUseCase.execute(trimmed)
 
-        val userVm = presenter.presentUser(trimmed)
-        val assistantText = chatUseCase.execute(trimmed)
-        val assistantVm = presenter.presentAssistant(result.assistantText)
+        val aiVm = chatPresenter.presentAssistant(result.assistantText)
+        val traceVm = tracePresenter.present(result.trace)
 
-        return listOf(userVm, assistantVm)
+        return ChatControllerResult(
+            chatItems = listOf(userVm, aiVm),
+            trace = traceVm
+        )
     }
 }

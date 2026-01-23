@@ -14,9 +14,11 @@ class ChatController (
         val trimmed = userText.trim()
         if(trimmed.isBlank()) return emptyList()
 
+        val result = chatUseCase.execute(trimmed)
+
         val userVm = presenter.presentUser(trimmed)
         val assistantText = chatUseCase.execute(trimmed)
-        val assistantVm = presenter.presentAssistant(assistantText)
+        val assistantVm = presenter.presentAssistant(result.assistantText)
 
         return listOf(userVm, assistantVm)
     }

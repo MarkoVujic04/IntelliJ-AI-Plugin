@@ -1,4 +1,5 @@
 package com.markolukarami.copilotclone.ui
+
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -12,6 +13,7 @@ import java.awt.Dimension
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTabbedPane
 
 class AiToolWindowPanel(private val project: Project) {
 
@@ -29,17 +31,28 @@ class AiToolWindowPanel(private val project: Project) {
         addActionListener { onSend() }
     }
 
-    val component: JComponent = JPanel(BorderLayout()).apply {
-        val scroll = JBScrollPane(outputArea).apply {
-            preferredSize = Dimension(380, 500)
-        }
-        add(scroll, BorderLayout.CENTER)
+    private val tracePanel = TracePanel()
 
-        val bottom = JPanel(BorderLayout(8, 8)).apply {
-            add(inputField, BorderLayout.CENTER)
-            add(sendButton, BorderLayout.EAST)
+    val component: JComponent = JPanel(BorderLayout()).apply {
+        val chatView = JPanel(BorderLayout()).apply {
+            val scroll = JBScrollPane(outputArea).apply {
+                preferredSize = Dimension(380, 500)
+            }
+            add(scroll, BorderLayout.CENTER)
+
+            val bottom = JPanel(BorderLayout(8, 8)).apply {
+                add(inputField, BorderLayout.CENTER)
+                add(sendButton, BorderLayout.EAST)
+            }
+            add(bottom, BorderLayout.SOUTH)
         }
-        add(bottom, BorderLayout.SOUTH)
+
+        val tabs = JTabbedPane().apply {
+            addTab("Chat", chatView)
+            addTab("Trace", tracePanel.component)
+        }
+
+        add(tabs, BorderLayout.CENTER)
     }
 
     private fun onSend() {
@@ -49,19 +62,35 @@ class AiToolWindowPanel(private val project: Project) {
         inputField.text = ""
         sendButton.isEnabled = false
 
-        append(text = "You: $text\n\n")
+        append("You: $text\n\n")
         append("AI is thinking...\n\n")
 
-        object : Task.Backgroundable(project, "Asking AI", false) {
+        object : Task.Backgroundable(project, "AI Chat", false) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Contacting LLM..."
 
-                val viewModels = controller.onUserMessage(text)
+                val result = controller.onUserMessage(text)
 
                 ApplicationManager.getApplication().invokeLater {
-                    val aiVM = viewModels.last()
-                    append("${aiVM.displayText}\n\n")
+                    result.chatItems.drop(1).forEach { vm ->
+                        append(vm.displayText + "\n\n")
+                    }
 
+                    tracePanel.setTraceLines(result.trace.lines)
+
+                    sendButton.isEnabled = true
+                }
+            }
+
+            override fun onThrowable(error: Throwable) {
+                ApplicationManager.getApplication().invokeLater {
+                    append("Error: ${error.message ?: "Unknown error"}\n\n")
+                    tracePanel.setTraceLines(
+                        listOf(
+                            "❌ UI/Thread error",
+                            error.message ?: error::class.java.name
+                        )
+                    )
                     sendButton.isEnabled = true
                 }
             }

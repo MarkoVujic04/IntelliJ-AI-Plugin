@@ -1,5 +1,6 @@
-package com.markolukarami.copilotclone.adapters.presentation
+package com.markolukarami.copilotclone.adapters.presenters
 
+import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
 import com.markolukarami.copilotclone.domain.entities.TraceStep
 import com.markolukarami.copilotclone.domain.entities.TraceType
 
@@ -8,10 +9,10 @@ class TracePresenter {
     fun present(steps: List<TraceStep>): TraceViewModel {
         val lines = steps.mapIndexed { index, step ->
             val prefix = when (step.type) {
-                TraceType.INFO -> "Info"
-                TraceType.IO -> "IO"
-                TraceType.MODEL -> "Model"
-                TraceType.ERROR -> "Error"
+                TraceType.INFO -> "ℹ"
+                TraceType.IO -> "📄"
+                TraceType.MODEL -> "🤖"
+                TraceType.ERROR -> "❌"
             }
 
             val detail = step.details?.takeIf { it.isNotBlank() }

@@ -2,7 +2,7 @@ package com.markolukarami.copilotclone.frameworks.llm
 import com.intellij.openapi.components.service
 import com.markolukarami.copilotclone.adapters.controllers.ChatController
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
-import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
+import com.markolukarami.copilotclone.adapters.presenters.TracePresenter
 import com.markolukarami.copilotclone.application.usecase.ChatUseCase
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJEditorContextProvider
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState

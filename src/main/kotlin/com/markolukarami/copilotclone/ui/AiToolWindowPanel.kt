@@ -26,12 +26,9 @@ class AiToolWindowPanel(private val project: Project) {
     }
 
     private val inputField = JBTextField()
+    private val sendButton = JButton("Send").apply { addActionListener { onSend() } }
 
-    private val sendButton = JButton("Send").apply {
-        addActionListener { onSend() }
-    }
-
-    private val tracePanel = TracePanel()
+    private val tracePanel = TracePanel(project)
 
     val component: JComponent = JPanel(BorderLayout()).apply {
         val chatView = JPanel(BorderLayout()).apply {
@@ -68,16 +65,11 @@ class AiToolWindowPanel(private val project: Project) {
         object : Task.Backgroundable(project, "AI Chat", false) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Contacting LLM..."
-
                 val result = controller.onUserMessage(text)
 
                 ApplicationManager.getApplication().invokeLater {
-                    result.chatItems.drop(1).forEach { vm ->
-                        append(vm.displayText + "\n\n")
-                    }
-
+                    result.chatItems.drop(1).forEach { vm -> append(vm.displayText + "\n\n") }
                     tracePanel.setTraceLines(result.trace.lines)
-
                     sendButton.isEnabled = true
                 }
             }
@@ -85,12 +77,6 @@ class AiToolWindowPanel(private val project: Project) {
             override fun onThrowable(error: Throwable) {
                 ApplicationManager.getApplication().invokeLater {
                     append("Error: ${error.message ?: "Unknown error"}\n\n")
-                    tracePanel.setTraceLines(
-                        listOf(
-                            "❌ UI/Thread error",
-                            error.message ?: error::class.java.name
-                        )
-                    )
                     sendButton.isEnabled = true
                 }
             }

@@ -1,25 +1,39 @@
 package com.markolukarami.copilotclone.frameworks.llm
+
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import com.markolukarami.copilotclone.adapters.controllers.ChatController
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
 import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
 import com.markolukarami.copilotclone.application.usecase.ChatUseCase
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJEditorContextProvider
+import com.markolukarami.copilotclone.frameworks.llm.LMStudioAdapter
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
+import com.markolukarami.copilotclone.frameworks.editor.IntelliJFileReaderAdapter
+import com.markolukarami.copilotclone.frameworks.editor.IntelliJTextSearchAdapter
 
 object ChatWiring {
 
-    fun chatController(project: com.intellij.openapi.project.Project): ChatController {
+    fun chatController(project: Project): ChatController {
         val settingsRepo = service<AiSettingsState>()
         val chatRepo = LMStudioAdapter()
-        val editorProvider = IntelliJEditorContextProvider(project)
+        val editorRepo = IntelliJEditorContextProvider(project)
+
+        val docSearchRepo = IntelliJTextSearchAdapter(project)
+        val fileReaderRepo = IntelliJFileReaderAdapter()
 
         val useCase = ChatUseCase(
             chatRepository = chatRepo,
             settingsRepository = settingsRepo,
-            editorProvider
+            editorContextRepository = editorRepo,
+            textSearchRepository = docSearchRepo,
+            fileReaderRepository = fileReaderRepo
         )
 
-        return ChatController(chatUseCase = useCase, chatPresenter = ChatPresenter(), tracePresenter = TracePresenter())
+        return ChatController(
+            chatUseCase = useCase,
+            chatPresenter = ChatPresenter(),
+            tracePresenter = TracePresenter()
+        )
     }
 }

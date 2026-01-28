@@ -2,8 +2,9 @@ package com.markolukarami.copilotclone.adapters.controllers
 
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
 import com.markolukarami.copilotclone.adapters.presentation.ChatViewModel
+import com.markolukarami.copilotclone.adapters.presentation.TraceLineVM
+import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
 import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
-import com.markolukarami.copilotclone.adapters.presenters.TracePresenter
 import com.markolukarami.copilotclone.application.dto.SendChatCommand
 import com.markolukarami.copilotclone.application.dto.SendChatResult
 import com.markolukarami.copilotclone.application.usecase.ChatUseCase
@@ -23,7 +24,7 @@ class ChatController (
         if (trimmed.isBlank()) {
             return ChatControllerResult(
                 chatItems = emptyList(),
-                trace = TraceViewModel(lines = listOf("No Input"))
+                trace = TraceViewModel(lines = listOf(TraceLineVM("No Input")))
             )
         }
 

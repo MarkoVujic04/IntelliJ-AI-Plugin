@@ -1,6 +1,4 @@
-package com.markolukarami.copilotclone.adapters.presenters
-
-import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
+package com.markolukarami.copilotclone.adapters.presentation
 import com.markolukarami.copilotclone.domain.entities.TraceStep
 import com.markolukarami.copilotclone.domain.entities.TraceType
 
@@ -16,11 +14,13 @@ class TracePresenter {
             }
 
             val detail = step.details?.takeIf { it.isNotBlank() }
-            if (detail == null) {
+            val text = if (detail == null) {
                 "${index + 1}. $prefix ${step.title}"
             } else {
                 "${index + 1}. $prefix ${step.title}\n    $detail"
             }
+
+            TraceLineVM(text = text, filePath = step.filePath)
         }
 
         return TraceViewModel(lines = lines)

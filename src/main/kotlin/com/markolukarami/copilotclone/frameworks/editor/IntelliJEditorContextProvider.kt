@@ -5,7 +5,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.markolukarami.copilotclone.domain.entities.ChatContext
+import com.markolukarami.copilotclone.domain.entities.context.ChatContext
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 
 class IntelliJEditorContextProvider(

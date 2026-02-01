@@ -1,4 +1,4 @@
-package com.markolukarami.copilotclone.domain.entities
+package com.markolukarami.copilotclone.domain.entities.tool
 
 data class ToolAction(
     val type: ToolType,

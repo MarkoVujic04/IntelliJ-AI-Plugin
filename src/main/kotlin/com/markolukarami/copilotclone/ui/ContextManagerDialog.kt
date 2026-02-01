@@ -9,7 +9,7 @@ import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.panel
-import com.markolukarami.copilotclone.domain.entities.ContextFile
+import com.markolukarami.copilotclone.domain.entities.context.ContextFile
 import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.ui.components.ContextListItem

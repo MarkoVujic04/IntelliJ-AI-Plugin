@@ -6,11 +6,11 @@ import com.markolukarami.copilotclone.domain.entities.ChatResult
 import com.markolukarami.copilotclone.domain.entities.ChatRole
 import com.markolukarami.copilotclone.domain.entities.FileSnippet
 import com.markolukarami.copilotclone.domain.entities.TextSnippet
-import com.markolukarami.copilotclone.domain.entities.ToolAction
-import com.markolukarami.copilotclone.domain.entities.ToolPlan
-import com.markolukarami.copilotclone.domain.entities.ToolType
-import com.markolukarami.copilotclone.domain.entities.TraceStep
-import com.markolukarami.copilotclone.domain.entities.TraceType
+import com.markolukarami.copilotclone.domain.entities.tool.ToolAction
+import com.markolukarami.copilotclone.domain.entities.tool.ToolPlan
+import com.markolukarami.copilotclone.domain.entities.tool.ToolType
+import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
+import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 import com.markolukarami.copilotclone.domain.repositories.FileReaderRepository
 import com.markolukarami.copilotclone.domain.repositories.TextSearchRepository

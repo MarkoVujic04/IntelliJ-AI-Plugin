@@ -1,8 +1,8 @@
 package com.markolukarami.copilotclone.frameworks.llm
 
-import com.markolukarami.copilotclone.domain.entities.ToolAction
-import com.markolukarami.copilotclone.domain.entities.ToolPlan
-import com.markolukarami.copilotclone.domain.entities.ToolType
+import com.markolukarami.copilotclone.domain.entities.tool.ToolAction
+import com.markolukarami.copilotclone.domain.entities.tool.ToolPlan
+import com.markolukarami.copilotclone.domain.entities.tool.ToolType
 import kotlinx.serialization.json.Json
 
 

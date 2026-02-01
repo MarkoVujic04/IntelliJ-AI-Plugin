@@ -1,6 +1,6 @@
 package com.markolukarami.copilotclone.adapters.presentation
-import com.markolukarami.copilotclone.domain.entities.TraceStep
-import com.markolukarami.copilotclone.domain.entities.TraceType
+import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
+import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 
 class TracePresenter {
 

@@ -8,7 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
-import com.markolukarami.copilotclone.domain.entities.ContextFile
+import com.markolukarami.copilotclone.domain.entities.context.ContextFile
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import java.awt.BorderLayout

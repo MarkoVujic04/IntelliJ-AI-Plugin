@@ -1,6 +1,6 @@
 package com.markolukarami.copilotclone.domain.repositories
 
-import com.markolukarami.copilotclone.domain.entities.ContextFile
+import com.markolukarami.copilotclone.domain.entities.context.ContextFile
 
 interface UserContextRepository {
 

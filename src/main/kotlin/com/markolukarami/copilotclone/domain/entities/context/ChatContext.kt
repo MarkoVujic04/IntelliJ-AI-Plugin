@@ -1,4 +1,4 @@
-package com.markolukarami.copilotclone.domain.entities
+package com.markolukarami.copilotclone.domain.entities.context
 
 data class ChatContext(
     val selectedText: String?,

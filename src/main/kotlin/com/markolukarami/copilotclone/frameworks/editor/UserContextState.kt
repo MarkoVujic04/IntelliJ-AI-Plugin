@@ -1,7 +1,7 @@
 package com.markolukarami.copilotclone.frameworks.editor
 
 import com.intellij.openapi.components.Service
-import com.markolukarami.copilotclone.domain.entities.ContextFile
+import com.markolukarami.copilotclone.domain.entities.context.ContextFile
 import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
 
 @Service(Service.Level.PROJECT)

@@ -18,6 +18,17 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.ui.EditorTextField
+import com.intellij.util.ui.JBUI
+import com.markolukarami.copilotclone.ui.PromptLibraryPopup
+import com.markolukarami.copilotclone.ui.components.BookmarkIcons
+import javax.swing.Box
+import javax.swing.BoxLayout
+import javax.swing.OverlayLayout
+import javax.swing.border.EmptyBorder
 
 class AiToolWindowPanel(private val project: Project) {
 
@@ -31,7 +42,34 @@ class AiToolWindowPanel(private val project: Project) {
         wrapStyleWord = true
     }
 
-    private val inputField = JBTextField()
+    private val inputDocument: Document = EditorFactory.getInstance().createDocument("")
+    private val inputField = EditorTextField(
+        inputDocument,
+        project,
+        PlainTextFileType.INSTANCE
+    ).apply {
+        setOneLineMode(false)
+        setPlaceholder("Ask AI Assistant…")
+
+        preferredSize = Dimension(0, 120)
+        minimumSize = Dimension(0, 120)
+    }
+
+    private val bookmarkButton = JButton(BookmarkIcons.BOOKMARK).apply {
+        isFocusable = false
+        toolTipText = "Saved prompts"
+        addActionListener {
+            PromptLibraryPopup.show(
+                project = project,
+                anchor = this,
+                currentInput = { inputField.text },
+                onPick = { picked ->
+                    inputField.text = picked
+                }
+            )
+        }
+    }
+
     private val sendButton = JButton("Send").apply { addActionListener { onSend() } }
 
     private val contextButton = JButton("Context").apply {
@@ -50,14 +88,10 @@ class AiToolWindowPanel(private val project: Project) {
             add(scroll, BorderLayout.CENTER)
 
             val bottom = JPanel(BorderLayout(8, 8)).apply {
-                add(inputField, BorderLayout.CENTER)
-
-                val rightButtons = JPanel().apply {
-                    add(contextButton)
-                    add(sendButton)
-                }
-                add(rightButtons, BorderLayout.EAST)
+                add(buildInputWithOverlayButtons(), BorderLayout.CENTER)
+                add(sendButton, BorderLayout.EAST)
             }
+
             add(bottom, BorderLayout.SOUTH)
         }
 
@@ -86,7 +120,6 @@ class AiToolWindowPanel(private val project: Project) {
             override fun createCenterPanel(): JComponent = manager.component
         }.show()
     }
-
 
     private fun onSend() {
         val text = inputField.text.trim()
@@ -122,5 +155,41 @@ class AiToolWindowPanel(private val project: Project) {
     private fun append(text: String) {
         outputArea.append(text)
         outputArea.caretPosition = outputArea.document.length
+    }
+
+    private fun buildInputWithOverlayButtons(): JComponent {
+        val container = JPanel().apply {
+            layout = OverlayLayout(this)
+            border = JBUI.Borders.empty()
+            preferredSize = Dimension(0, 120)
+            minimumSize = Dimension(0, 120)
+        }
+
+        inputField.alignmentX = 0f
+        inputField.alignmentY = 0f
+
+        val overlayRow = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            isOpaque = false
+            border = EmptyBorder(0, 8, 8, 0)
+
+            bookmarkButton.putClientProperty("JButton.buttonType", "toolbutton")
+            contextButton.putClientProperty("JButton.buttonType", "toolbutton")
+
+            bookmarkButton.margin = JBUI.insets(2, 6)
+            contextButton.margin = JBUI.insets(2, 10)
+
+            add(bookmarkButton)
+            add(Box.createHorizontalStrut(6))
+            add(contextButton)
+        }
+
+        overlayRow.alignmentX = 0f
+        overlayRow.alignmentY = 1f
+
+        container.add(overlayRow)
+        container.add(inputField)
+
+        return container
     }
 }

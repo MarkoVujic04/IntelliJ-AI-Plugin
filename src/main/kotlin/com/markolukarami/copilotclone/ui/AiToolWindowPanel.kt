@@ -17,6 +17,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
+import com.intellij.openapi.ui.DialogWrapper
 
 class AiToolWindowPanel(private val project: Project) {
 
@@ -69,15 +70,23 @@ class AiToolWindowPanel(private val project: Project) {
     }
 
     private fun onPickContextFiles() {
-        val file = ContextFilePicker.pickSingleProjectFile(project) ?: return
+        val manager = ContextManagerDialog(project) {
+            val files = userContextState.getSelectedContextFiles().map { it.path }
+            append("Context files now (${files.size}):\n")
+            files.forEach { append("- $it\n") }
+            append("\n")
+        }
 
-        userContextState.setSelectedContextFiles(
-            listOf(com.markolukarami.copilotclone.domain.entities.ContextFile(file.path))
-        )
+        object : DialogWrapper(project, true) {
+            init {
+                title = "Context"
+                init()
+            }
 
-        append("Context added:\n")
-        append("- ${file.path}\n\n")
+            override fun createCenterPanel(): JComponent = manager.component
+        }.show()
     }
+
 
     private fun onSend() {
         val text = inputField.text.trim()

@@ -1,12 +1,15 @@
 package com.markolukarami.copilotclone.ui
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
+import com.markolukarami.copilotclone.domain.entities.ContextFile
+import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -19,6 +22,8 @@ class AiToolWindowPanel(private val project: Project) {
 
     private val controller = ChatWiring.chatController(project)
 
+    private val userContextState = project.service<UserContextState>()
+
     private val outputArea = JBTextArea().apply {
         isEditable = false
         lineWrap = true
@@ -27,6 +32,12 @@ class AiToolWindowPanel(private val project: Project) {
 
     private val inputField = JBTextField()
     private val sendButton = JButton("Send").apply { addActionListener { onSend() } }
+
+    private val contextButton = JButton("Context").apply {
+        isFocusable = false
+        toolTipText = "Choose file(s) to include as context"
+        addActionListener { onPickContextFiles() }
+    }
 
     private val tracePanel = TracePanel(project)
 
@@ -39,7 +50,12 @@ class AiToolWindowPanel(private val project: Project) {
 
             val bottom = JPanel(BorderLayout(8, 8)).apply {
                 add(inputField, BorderLayout.CENTER)
-                add(sendButton, BorderLayout.EAST)
+
+                val rightButtons = JPanel().apply {
+                    add(contextButton)
+                    add(sendButton)
+                }
+                add(rightButtons, BorderLayout.EAST)
             }
             add(bottom, BorderLayout.SOUTH)
         }
@@ -50,6 +66,17 @@ class AiToolWindowPanel(private val project: Project) {
         }
 
         add(tabs, BorderLayout.CENTER)
+    }
+
+    private fun onPickContextFiles() {
+        val file = ContextFilePicker.pickSingleProjectFile(project) ?: return
+
+        userContextState.setSelectedContextFiles(
+            listOf(com.markolukarami.copilotclone.domain.entities.ContextFile(file.path))
+        )
+
+        append("Context added:\n")
+        append("- ${file.path}\n\n")
     }
 
     private fun onSend() {

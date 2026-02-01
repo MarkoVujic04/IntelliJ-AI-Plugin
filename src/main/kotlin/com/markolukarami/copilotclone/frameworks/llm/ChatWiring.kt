@@ -11,11 +11,13 @@ import com.markolukarami.copilotclone.frameworks.llm.LMStudioAdapter
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJFileReaderAdapter
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJTextSearchAdapter
+import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 
 object ChatWiring {
 
     fun chatController(project: Project): ChatController {
         val settingsRepo = service<AiSettingsState>()
+        val userContextRepo = project.service<UserContextState>()
         val chatRepo = LMStudioAdapter()
         val editorRepo = IntelliJEditorContextProvider(project)
 
@@ -27,7 +29,8 @@ object ChatWiring {
             settingsRepository = settingsRepo,
             editorContextRepository = editorRepo,
             textSearchRepository = docSearchRepo,
-            fileReaderRepository = fileReaderRepo
+            fileReaderRepository = fileReaderRepo,
+            userContextRepository = userContextRepo,
         )
 
         return ChatController(

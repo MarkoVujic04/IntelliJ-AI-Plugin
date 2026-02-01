@@ -5,24 +5,20 @@ import com.markolukarami.copilotclone.domain.entities.TraceType
 class TracePresenter {
 
     fun present(steps: List<TraceStep>): TraceViewModel {
-        val lines = steps.mapIndexed { index, step ->
-            val prefix = when (step.type) {
+        val lines = steps.mapIndexed { i, s ->
+            val icon = when (s.type) {
                 TraceType.INFO -> "ℹ"
                 TraceType.IO -> "📄"
                 TraceType.MODEL -> "🤖"
+                TraceType.TOOL -> "🛠"
                 TraceType.ERROR -> "❌"
             }
 
-            val detail = step.details?.takeIf { it.isNotBlank() }
-            val text = if (detail == null) {
-                "${index + 1}. $prefix ${step.title}"
-            } else {
-                "${index + 1}. $prefix ${step.title}\n    $detail"
-            }
-
-            TraceLineVM(text = text, filePath = step.filePath)
+            TraceLineVM(
+                text = "${i + 1}. $icon ${s.title}${s.details?.let { "\n   $it" } ?: ""}",
+                filePath = s.filePath
+            )
         }
-
-        return TraceViewModel(lines = lines)
+        return TraceViewModel(lines)
     }
 }

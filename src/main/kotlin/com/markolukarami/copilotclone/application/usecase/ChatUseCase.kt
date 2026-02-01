@@ -5,112 +5,139 @@ import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatResult
 import com.markolukarami.copilotclone.domain.entities.ChatRole
 import com.markolukarami.copilotclone.domain.entities.FileSnippet
+import com.markolukarami.copilotclone.domain.entities.TextSnippet
+import com.markolukarami.copilotclone.domain.entities.ToolAction
+import com.markolukarami.copilotclone.domain.entities.ToolPlan
+import com.markolukarami.copilotclone.domain.entities.ToolType
 import com.markolukarami.copilotclone.domain.entities.TraceStep
 import com.markolukarami.copilotclone.domain.entities.TraceType
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 import com.markolukarami.copilotclone.domain.repositories.FileReaderRepository
 import com.markolukarami.copilotclone.domain.repositories.TextSearchRepository
+import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
+import com.markolukarami.copilotclone.frameworks.llm.ToolPlanParser
 
 class ChatUseCase(
     private val chatRepository: ChatRepository,
     private val settingsRepository: SettingsRepository,
     private val editorContextRepository: EditorContextRepository,
     private val textSearchRepository: TextSearchRepository,
-    private val fileReaderRepository: FileReaderRepository
+    private val fileReaderRepository: FileReaderRepository,
+    private val userContextRepository: UserContextRepository
 ) {
+
     fun execute(userText: String): ChatResult {
         val trace = mutableListOf<TraceStep>()
-
-        trace += TraceStep("Load settings", "Read Base URL + Model", TraceType.INFO)
         val config = settingsRepository.getModelConfig()
-        trace += TraceStep("Model config", "baseUrl=${config.baseUrl}, model=${config.model}", TraceType.INFO)
 
-        trace += TraceStep("Read editor context", "Selection + active file", TraceType.IO)
-        val context = editorContextRepository.getCurrentContext()
+        val editorContext = editorContextRepository.getCurrentContext()
 
-        val messages = mutableListOf(
+        trace += TraceStep("Ask model for tool plan", type = TraceType.MODEL)
+
+        val planPrompt = listOf(
             ChatMessage(
-                role = ChatRole.SYSTEM,
-                content = "You are a helpful coding assistant inside IntelliJ IDEA. Be direct and practical."
-            )
+                ChatRole.SYSTEM,
+                """
+                You are a planning module.
+                Decide if tools are needed.
+
+                Tools:
+                - SEARCH_PROJECT_TEXT
+                - READ_FILE
+
+                Output STRICT JSON only:
+                {
+                  "useTools": true/false,
+                  "reasoning": "...",
+                  "actions": [
+                    {"type":"SEARCH_PROJECT_TEXT","query":"...","limit":8}
+                  ]
+                }
+                """.trimIndent()
+            ),
+            ChatMessage(ChatRole.USER, userText)
         )
 
-        context.selectedText?.takeIf { it.isNotBlank() }?.let { sel ->
-            trace += TraceStep(
-                title = "Selection detected",
-                details = "chars=${sel.length}, file=${context.filePath ?: "unknown"}",
-                type = TraceType.INFO,
-                filePath = context.filePath
-            )
-            messages += ChatMessage(
-                role = ChatRole.SYSTEM,
-                content = "The user selected this code:\n$sel"
-            )
-        } ?: run {
-            trace += TraceStep("No selection", "No selected text in editor", TraceType.INFO)
-        }
+        val planRaw = chatRepository.chat(config, planPrompt)
+        val plan = ToolPlanParser.parseOrNull(planRaw)
 
-        val query = userText.trim()
-        trace += TraceStep("Search project text", "query=\"$query\"", TraceType.IO)
-
-        val snippets = textSearchRepository.search(query, limit = 8)
-
-        if (snippets.isEmpty()) {
-            trace += TraceStep("Search result", "No matches found", TraceType.INFO)
+        if (plan == null) {
+            trace += TraceStep("Plan parsing failed", type = TraceType.ERROR)
         } else {
-            trace += TraceStep("Search result", "matches=${snippets.size}", TraceType.INFO)
-
-            val snippetText = snippets.joinToString("\n") {
-                "- ${it.filePath}:${it.lineNumber}  ${it.preview}"
-            }
-            messages += ChatMessage(
-                role = ChatRole.SYSTEM,
-                content = "Project text search snippets (for context):\n$snippetText"
+            trace += TraceStep(
+                "Plan received",
+                "useTools=${plan.useTools}, actions=${plan.actions.size}",
+                TraceType.INFO
             )
         }
 
-        val topFiles = snippets.map { it.filePath }.distinct().take(2)
-        val readFiles = mutableListOf<FileSnippet>()
+        val effectivePlan = plan ?: fallbackPlan(userText)
 
-        for (path in topFiles) {
-            trace += TraceStep("Read file", path, TraceType.IO, filePath = path)
+        val snippets = mutableListOf<TextSnippet>()
+        val files = mutableListOf<FileSnippet>()
 
-            val fs = fileReaderRepository.readFile(path, maxChars = 6000)
-            if (fs == null) {
-                trace += TraceStep("File read failed", "Could not read file", TraceType.ERROR, filePath = path)
-                continue
+        if (effectivePlan.useTools) {
+            for (action in effectivePlan.actions) {
+                when (action.type) {
+                    ToolType.SEARCH_PROJECT_TEXT -> {
+                        trace += TraceStep("Tool: Search project", action.query, TraceType.TOOL)
+                        snippets += textSearchRepository.search(
+                            action.query ?: userText,
+                            action.limit ?: 8
+                        )
+                    }
+
+                    ToolType.READ_FILE -> {
+                        val path = action.filePath ?: continue
+                        trace += TraceStep("Tool: Read file", path, TraceType.TOOL, path)
+                        fileReaderRepository.readFile(path)?.let { files += it }
+                    }
+                }
             }
-
-            readFiles += fs
-            trace += TraceStep("File read OK", "chars=${fs.content.length}", TraceType.INFO, filePath = path)
         }
 
-        if (readFiles.isNotEmpty()) {
-            val block = readFiles.joinToString("\n\n") { fs ->
-                "FILE: ${fs.filePath}\n---\n${fs.content}\n---"
-            }
-            messages += ChatMessage(
-                role = ChatRole.SYSTEM,
-                content = "Relevant file content excerpts:\n$block"
-            )
-        }
-
-        messages += ChatMessage(role = ChatRole.USER, content = userText)
-
-        trace += TraceStep(
-            "Send request to LM Studio",
-            "POST /v1/chat/completions (messages=${messages.size})",
-            TraceType.MODEL
+        val finalMessages = mutableListOf(
+            ChatMessage(ChatRole.SYSTEM, "You are a helpful IntelliJ coding assistant.")
         )
 
-        val assistantText = chatRepository.chat(config, messages)
-
-        trace += TraceStep("Receive response", "chars=${assistantText.length}", TraceType.MODEL)
-
-        if (assistantText.startsWith("Error:", ignoreCase = true)) {
-            trace += TraceStep("Model error", assistantText, TraceType.ERROR)
+        editorContext.selectedText?.let {
+            finalMessages += ChatMessage(ChatRole.SYSTEM, "Selected code:\n$it")
         }
 
-        return ChatResult(assistantText = assistantText, trace = trace)
+        if (snippets.isNotEmpty()) {
+            finalMessages += ChatMessage(
+                ChatRole.SYSTEM,
+                "Project snippets:\n" + snippets.joinToString("\n") {
+                    "- ${it.filePath}:${it.lineNumber} ${it.preview}"
+                }
+            )
+        }
+
+        if (files.isNotEmpty()) {
+            finalMessages += ChatMessage(
+                ChatRole.SYSTEM,
+                "File excerpts:\n" + files.joinToString("\n\n") {
+                    "FILE ${it.filePath}\n${it.content.take(1500)}"
+                }
+            )
+        }
+
+        finalMessages += ChatMessage(ChatRole.USER, userText)
+
+        trace += TraceStep("Send final request", type = TraceType.MODEL)
+        val answer = chatRepository.chat(config, finalMessages)
+
+        trace += TraceStep("Receive response", type = TraceType.MODEL)
+
+        return ChatResult(answer, trace)
     }
+
+    private fun fallbackPlan(text: String) =
+        ToolPlan(
+            useTools = true,
+            actions = listOf(
+                ToolAction(ToolType.SEARCH_PROJECT_TEXT, query = text, limit = 8)
+            ),
+            reasoning = "Fallback plan"
+        )
 }

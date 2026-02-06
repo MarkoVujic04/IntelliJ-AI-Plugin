@@ -7,7 +7,7 @@ import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
 import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
 import com.markolukarami.copilotclone.application.dto.SendChatCommand
 import com.markolukarami.copilotclone.application.dto.SendChatResult
-import com.markolukarami.copilotclone.application.usecase.ChatUseCase
+import com.markolukarami.copilotclone.application.usecase.ChatHandler
 
 data class ChatControllerResult(
     val chatItems: List<ChatViewModel>,
@@ -15,7 +15,7 @@ data class ChatControllerResult(
 )
 
 class ChatController (
-    private val chatUseCase: ChatUseCase,
+    private val chatHandler: ChatHandler,
     private val chatPresenter: ChatPresenter,
     private val tracePresenter: TracePresenter
 ) {
@@ -30,7 +30,7 @@ class ChatController (
 
         val userVm = chatPresenter.presentUser(trimmed)
 
-        val result = chatUseCase.execute(trimmed)
+        val result = chatHandler.execute(trimmed)
 
         val aiVm = chatPresenter.presentAssistant(result.assistantText)
         val traceVm = tracePresenter.present(result.trace)

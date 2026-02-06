@@ -24,9 +24,9 @@ class ChatUseCase(
     private val textSearchRepository: TextSearchRepository,
     private val fileReaderRepository: FileReaderRepository,
     private val userContextRepository: UserContextRepository
-) {
+) : ChatHandler {
 
-    fun execute(userText: String): ChatResult {
+    override fun execute(userText: String): ChatResult {
         val trace = mutableListOf<TraceStep>()
         val config = settingsRepository.getModelConfig()
 

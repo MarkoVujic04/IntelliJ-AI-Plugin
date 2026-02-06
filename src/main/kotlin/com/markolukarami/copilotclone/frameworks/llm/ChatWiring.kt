@@ -5,6 +5,7 @@ import com.intellij.openapi.project.Project
 import com.markolukarami.copilotclone.adapters.controllers.ChatController
 import com.markolukarami.copilotclone.adapters.presentation.ChatPresenter
 import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
+import com.markolukarami.copilotclone.application.usecase.AgentChatUseCase
 import com.markolukarami.copilotclone.application.usecase.ChatUseCase
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJEditorContextProvider
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioAdapter
@@ -33,8 +34,10 @@ object ChatWiring {
             userContextRepository = userContextRepo,
         )
 
+        val agentUseCase = AgentChatUseCase(useCase)
+
         return ChatController(
-            chatUseCase = useCase,
+            chatHandler = agentUseCase,
             chatPresenter = ChatPresenter(),
             tracePresenter = TracePresenter()
         )

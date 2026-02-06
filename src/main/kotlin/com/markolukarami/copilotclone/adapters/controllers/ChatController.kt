@@ -5,8 +5,6 @@ import com.markolukarami.copilotclone.adapters.presentation.ChatViewModel
 import com.markolukarami.copilotclone.adapters.presentation.TraceLineVM
 import com.markolukarami.copilotclone.adapters.presentation.TracePresenter
 import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
-import com.markolukarami.copilotclone.application.dto.SendChatCommand
-import com.markolukarami.copilotclone.application.dto.SendChatResult
 import com.markolukarami.copilotclone.application.usecase.ChatHandler
 
 data class ChatControllerResult(

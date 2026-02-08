@@ -21,6 +21,8 @@ import com.intellij.util.ui.components.BorderLayoutPanel
 import com.intellij.ui.JBColor
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
+import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
+import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
 import com.markolukarami.copilotclone.ui.components.BookmarkIcons
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -37,6 +39,9 @@ class AiToolWindowPanel(private val project: Project) {
 
     private val controller = ChatWiring.chatController(project)
     private val userContextState = project.service<UserContextState>()
+    private val settingsState = service<AiSettingsState>()
+    private val modelRegistry = LMStudioModelRegistryAdapter()
+
 
     private val outputArea = JBTextArea().apply {
         isEditable = false
@@ -169,10 +174,18 @@ class AiToolWindowPanel(private val project: Project) {
             }
         }
 
+        val modelButton = JButton(AllIcons.General.Settings).apply {
+            isFocusable = false
+            toolTipText = "Select model"
+            putClientProperty("JButton.buttonType", "toolbutton")
+            addActionListener { onPickModel(this) }
+        }
+
         return JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
             isOpaque = false
             add(plus)
             add(bookmark)
+            add(modelButton)
         }
     }
 
@@ -332,4 +345,51 @@ class AiToolWindowPanel(private val project: Project) {
         outputArea.append(text)
         outputArea.caretPosition = outputArea.document.length
     }
+
+    private fun onPickModel(anchor: JComponent) {
+        object : Task.Backgroundable(project, "Fetching models from LM Studio", false) {
+            override fun run(indicator: ProgressIndicator) {
+                indicator.text = "Fetching models..."
+
+                val config = settingsState.getModelConfig()
+                val models = try {
+                    modelRegistry.listModels(config)
+                } catch (t: Throwable) {
+                    ApplicationManager.getApplication().invokeLater {
+                        append("Error fetching models: ${t.message}\n")
+                        append("Base URL: ${config.baseUrl}\n\n")
+                    }
+                    return
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    if (models.isEmpty()) {
+                        append("No models returned.\n")
+                        append("LM Studio URL: ${config.baseUrl.trimEnd('/')}/v1/models\n\n")
+                        return@invokeLater
+                    }
+
+                    ModelPickerPopup.show(
+                        project = project,
+                        anchor = anchor,
+                        models = models,
+                        currentModelId = settingsState.getSelectedModel(),
+                        onPick = { picked ->
+                            settingsState.setSelectedModel(picked.id)
+                            append("✅ Active model set to: ${picked.id}\n\n")
+                        }
+                    )
+                }
+            }
+
+            override fun onThrowable(error: Throwable) {
+                val config = settingsState.getModelConfig()
+                ApplicationManager.getApplication().invokeLater {
+                    append("Error fetching models: ${error.message ?: "Unknown error"}\n")
+                    append("Base URL: ${config.baseUrl}\n\n")
+                }
+            }
+        }.queue()
+    }
+
 }

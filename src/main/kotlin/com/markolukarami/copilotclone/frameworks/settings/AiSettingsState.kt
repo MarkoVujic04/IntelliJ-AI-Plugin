@@ -24,6 +24,9 @@ class AiSettingsState : PersistentStateComponent<AiSettingsState>, SettingsRepos
         XmlSerializerUtil.copyBean(state, this)
     }
 
+    fun getSelectedModel(): String = state.model
+    fun setSelectedModel(value: String) { state.model = value }
+
     override fun getModelConfig(): ModelConfig {
         val normalizedUrl = baseUrl.trim().removeSuffix("/")
         return ModelConfig(

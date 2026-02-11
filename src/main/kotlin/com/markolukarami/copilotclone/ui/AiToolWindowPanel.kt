@@ -115,18 +115,20 @@ class AiToolWindowPanel(private val project: Project) {
             addActionListener { onNewChat() }
         }
 
-        val header = BorderLayoutPanel().apply {
+        tabs.setTabComponentAt(0, JBLabel("Chat"))
+
+        tabs.setTabComponentAt(1, BorderLayoutPanel().apply {
             isOpaque = false
-            border = JBUI.Borders.empty(4, 8)
+
+            val traceLabel = JBLabel("Trace").apply {
+                border = JBUI.Borders.emptyRight(220)
+            }
+
+            addToLeft(traceLabel)
             addToRight(newChatButton)
-        }
+        })
 
-        val center = BorderLayoutPanel().apply {
-            addToTop(header)
-            addToCenter(tabs)
-        }
-
-        add(center, BorderLayout.CENTER)
+        add(tabs, BorderLayout.CENTER)
     }
 
     private fun onNewChat() {

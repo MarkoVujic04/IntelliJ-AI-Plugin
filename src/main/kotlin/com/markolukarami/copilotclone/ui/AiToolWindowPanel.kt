@@ -19,6 +19,7 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
 import com.intellij.ui.JBColor
+import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
@@ -41,7 +42,7 @@ class AiToolWindowPanel(private val project: Project) {
     private val userContextState = project.service<UserContextState>()
     private val settingsState = service<AiSettingsState>()
     private val modelRegistry = LMStudioModelRegistryAdapter()
-
+    private val chatSessions = project.service<ChatSessionState>()
 
     private val outputArea = JBTextArea().apply {
         isEditable = false
@@ -108,7 +109,31 @@ class AiToolWindowPanel(private val project: Project) {
             addTab("Trace", tracePanel.component)
         }
 
-        add(tabs, BorderLayout.CENTER)
+        val newChatButton = JButton("New Chat").apply {
+            isFocusable = false
+            putClientProperty("JButton.buttonType", "toolbutton")
+            addActionListener { onNewChat() }
+        }
+
+        val header = BorderLayoutPanel().apply {
+            isOpaque = false
+            border = JBUI.Borders.empty(4, 8)
+            addToRight(newChatButton)
+        }
+
+        val center = BorderLayoutPanel().apply {
+            addToTop(header)
+            addToCenter(tabs)
+        }
+
+        add(center, BorderLayout.CENTER)
+    }
+
+    private fun onNewChat() {
+        chatSessions.createNewSession("New Chat")
+        outputArea.text = ""
+        tracePanel.setTraceLines(emptyList())
+        append("🆕 New chat started.\n\n")
     }
 
     private fun buildComposer(): JComponent {

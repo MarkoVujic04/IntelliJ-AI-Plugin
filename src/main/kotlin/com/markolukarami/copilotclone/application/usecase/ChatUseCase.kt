@@ -11,6 +11,7 @@ import com.markolukarami.copilotclone.domain.entities.tool.ToolPlan
 import com.markolukarami.copilotclone.domain.entities.tool.ToolType
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
+import com.markolukarami.copilotclone.domain.repositories.ChatSessionRepository
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 import com.markolukarami.copilotclone.domain.repositories.FileReaderRepository
 import com.markolukarami.copilotclone.domain.repositories.TextSearchRepository
@@ -23,7 +24,8 @@ class ChatUseCase(
     private val editorContextRepository: EditorContextRepository,
     private val textSearchRepository: TextSearchRepository,
     private val fileReaderRepository: FileReaderRepository,
-    private val userContextRepository: UserContextRepository
+    private val userContextRepository: UserContextRepository,
+    private val chatSessionRepository: ChatSessionRepository,
 ) : ChatHandler {
 
     override fun execute(userText: String): ChatResult {
@@ -120,6 +122,12 @@ class ChatUseCase(
                     "FILE ${it.filePath}\n${it.content.take(1500)}"
                 }
             )
+        }
+
+        val sessionId = chatSessionRepository.getActiveSessionId()
+        val history = chatSessionRepository.getMessages(sessionId)
+        if (history.isNotEmpty()) {
+            finalMessages += history
         }
 
         finalMessages += ChatMessage(ChatRole.USER, userText)

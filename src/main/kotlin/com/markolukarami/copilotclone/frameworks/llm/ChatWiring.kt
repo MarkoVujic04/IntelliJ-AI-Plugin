@@ -11,6 +11,7 @@ import com.markolukarami.copilotclone.agent.application.Scout
 import com.markolukarami.copilotclone.agent.application.Strategist
 import com.markolukarami.copilotclone.application.usecase.AgentChatUseCase
 import com.markolukarami.copilotclone.application.usecase.AgentPipelineUseCase
+import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJEditorContextProvider
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJFileReaderAdapter
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJTextSearchAdapter
@@ -27,6 +28,7 @@ object ChatWiring {
         val editorRepo = IntelliJEditorContextProvider(project)
         val textSearchRepo = IntelliJTextSearchAdapter(project)
         val fileReaderRepo = IntelliJFileReaderAdapter()
+        val chatSessionRepo = project.service<ChatSessionState>()
 
         val planner = Planner(chatRepo)
         val scout = Scout(
@@ -57,7 +59,8 @@ object ChatWiring {
         return ChatController(
             chatHandler = agentUseCase,
             chatPresenter = ChatPresenter(),
-            tracePresenter = TracePresenter()
+            tracePresenter = TracePresenter(),
+            chatSessionRepository = chatSessionRepo,
         )
     }
 }

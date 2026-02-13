@@ -40,6 +40,11 @@ class PatchPreviewDialog(
         }
     }
 
+    override fun doOKAction() {
+        onApply()
+        super.doOKAction()
+    }
+
     private fun buildPreview(p: PatchPlan): String {
         val sb = StringBuilder()
         sb.append("Summary:\n")

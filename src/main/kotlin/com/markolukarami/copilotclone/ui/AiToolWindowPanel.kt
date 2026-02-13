@@ -20,6 +20,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
 import com.intellij.ui.JBColor
 import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
+import com.markolukarami.copilotclone.frameworks.editor.IntelliJPatchApplier
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
@@ -135,7 +136,7 @@ class AiToolWindowPanel(private val project: Project) {
         chatSessions.createNewSession("New Chat")
         outputArea.text = ""
         tracePanel.setTraceLines(emptyList())
-        append("🆕 New chat started.\n\n")
+        append("New chat started.\n\n")
     }
 
     private fun buildComposer(): JComponent {
@@ -351,10 +352,20 @@ class AiToolWindowPanel(private val project: Project) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Contacting LLM..."
                 val result = controller.onUserMessage(text)
+                append("DEBUG patch present: ${result.patch != null}\n")
 
                 ApplicationManager.getApplication().invokeLater {
                     result.chatItems.drop(1).forEach { vm -> append(vm.displayText + "\n\n") }
                     tracePanel.setTraceLines(result.trace.lines)
+
+                    val patch = result.patch
+                    if (patch != null) {
+                        PatchPreviewDialog(project, patch) {
+                            project.service<IntelliJPatchApplier>().apply(patch)
+                            append("Patch applied (undo with Ctrl+Z)\n\n")
+                        }.show()
+                    }
+
                     sendButton.isEnabled = true
                 }
             }
@@ -403,7 +414,7 @@ class AiToolWindowPanel(private val project: Project) {
                         currentModelId = settingsState.getSelectedModel(),
                         onPick = { picked ->
                             settingsState.setSelectedModel(picked.id)
-                            append("✅ Active model set to: ${picked.id}\n\n")
+                            append("Active model set to: ${picked.id}\n\n")
                         }
                     )
                 }

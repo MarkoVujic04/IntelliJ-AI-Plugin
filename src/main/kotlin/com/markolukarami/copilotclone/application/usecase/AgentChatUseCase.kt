@@ -10,9 +10,11 @@ class AgentChatUseCase(
 
     override fun execute(userText: String): ChatResult {
         val result = core.execute(userText)
+
         val newTrace = mutableListOf<TraceStep>()
         newTrace += TraceStep("Agent entrypoint", "AgentChatUseCase did the run", TraceType.INFO)
         newTrace += result.trace
-        return ChatResult(result.assistantText, newTrace)
+
+        return result.copy(trace = newTrace)
     }
 }

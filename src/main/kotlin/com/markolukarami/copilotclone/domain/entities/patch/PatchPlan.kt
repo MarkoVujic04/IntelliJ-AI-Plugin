@@ -1,6 +1,6 @@
 package com.markolukarami.copilotclone.domain.entities.patch
 
 data class PatchPlan(
-    val summary: String,
-    val files: List<FilePatch>
+    val summary: String = "",
+    val files: List<FilePatch> = emptyList(),
 )

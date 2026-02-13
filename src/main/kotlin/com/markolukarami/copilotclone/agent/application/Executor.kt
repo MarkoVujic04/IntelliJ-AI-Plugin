@@ -1,8 +1,11 @@
 package com.markolukarami.copilotclone.agent.application
 
+import com.markolukarami.copilotclone.application.patch.PatchParser
 import com.markolukarami.copilotclone.domain.entities.ChatMessage
+import com.markolukarami.copilotclone.domain.entities.ChatResult
 import com.markolukarami.copilotclone.domain.entities.ChatRole
 import com.markolukarami.copilotclone.domain.entities.ModelConfig
+import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.ChatRepository
@@ -13,13 +16,124 @@ class Executor(
     private val editorContextRepository: EditorContextRepository
 ) {
 
+    private fun isPatchRequest(userText: String): Boolean {
+        val t = userText.lowercase()
+        return t.startsWith("apply") ||
+                t.contains("apply this") ||
+                t.contains("make this change") ||
+                t.contains("rename") ||
+                t.contains("refactor") ||
+                t.contains("edit the code") ||
+                t.contains("change the code")
+    }
+
+    private fun buildPatchPrompt(userText: String, evidence: Strategist.SelectedEvidence): String {
+        val fileContent = evidence.files.firstOrNull()?.content ?: ""
+
+        return """
+You must reply with ONLY a JSON object.
+Start with "{" and end with "}".
+No other text.
+
+Schema:
+{
+  "summary": "short description",
+  "files": [
+    {
+      "relativePath": "src/main/java/.../SudokuModel.java",
+      "summary": "...",
+      "files": [
+        {
+            "relativePath": "...",
+            "edits": [
+                {
+                    "search": "public void reset(",
+                    "replace": "public void preset("
+                }
+            ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- relativePath is relative to project root (no absolute paths).
+- start/end are character offsets into EXACT file content below.
+- If you cannot compute offsets, return: {"summary":"...","files":[]}
+
+USER REQUEST:
+$userText
+
+FILE CONTENT:
+$fileContent
+""".trimIndent()
+    }
+
     fun executeFinal(
         userText: String,
         config: ModelConfig,
         evidence: Strategist.SelectedEvidence,
         trace: MutableList<TraceStep>
-    ): String {
-        trace += TraceStep("Agent: Executor", "Compose final prompt", TraceType.MODEL)
+    ): ChatResult {
+
+        val patchMode = isPatchRequest(userText)
+
+        if (patchMode) {
+            trace += TraceStep("Agent: Executor", "Patch-mode JSON call", TraceType.MODEL)
+
+            val patchPrompt = buildPatchPrompt(userText, evidence)
+
+            val patchMessages = listOf(
+                ChatMessage(ChatRole.USER, patchPrompt)
+            )
+
+            val patchConfig = config.copy(
+                temperature = 0.0,
+                maxTokens = 300
+            )
+
+            val raw1 = chatRepository.chat(patchConfig, patchMessages)
+            val patch1 = PatchParser.parseOrNull(raw1)
+
+            if (patch1 != null && patch1.files.isNotEmpty()) {
+                trace += TraceStep("Patch proposed", "files=${patch1.files.size}", TraceType.INFO)
+                return ChatResult(
+                    assistantText = "I prepared an edit patch:\n- ${patch1.summary}\nPress Apply to update your code.",
+                    trace = trace,
+                    patch = patch1
+                )
+            }
+
+            trace += TraceStep("Patch parse failed", "Retry JSON-only", TraceType.ERROR)
+
+            val retryMessages = listOf(
+                ChatMessage(
+                    ChatRole.USER,
+                    "Return ONLY the JSON object. No words. No markdown. Use the schema exactly.\n\n$patchPrompt"
+                )
+            )
+
+            val raw2 = chatRepository.chat(patchConfig, retryMessages)
+            val patch2 = PatchParser.parseOrNull(raw2)
+
+            if (patch2 != null && patch2.files.isNotEmpty()) {
+                trace += TraceStep("Patch proposed", "files=${patch2.files.size}", TraceType.INFO)
+                return ChatResult(
+                    assistantText = "I prepared an edit patch:\n- ${patch2.summary}\nPress Apply to update your code.",
+                    trace = trace,
+                    patch = patch2
+                )
+            }
+
+            return ChatResult(
+                assistantText = raw2,
+                trace = trace,
+                patch = null
+            )
+        }
+
+        trace += TraceStep("Agent: Executor", "Normal answer mode", TraceType.MODEL)
 
         val finalMessages = mutableListOf(
             ChatMessage(ChatRole.SYSTEM, "You are a helpful IntelliJ coding assistant.")
@@ -43,17 +157,14 @@ class Executor(
             finalMessages += ChatMessage(
                 ChatRole.SYSTEM,
                 "File excerpts:\n" + evidence.files.joinToString("\n\n") {
-                    "FILE ${it.filePath}\n${it.content}"
+                    "FILE ${it.filePath}\n${it.content.take(1500)}"
                 }
             )
         }
 
         finalMessages += ChatMessage(ChatRole.USER, userText)
 
-        trace += TraceStep("Model: send final request", type = TraceType.MODEL)
         val answer = chatRepository.chat(config, finalMessages)
-        trace += TraceStep("Model: receive response", type = TraceType.MODEL)
-
-        return answer
+        return ChatResult(answer, trace, patch = null)
     }
 }

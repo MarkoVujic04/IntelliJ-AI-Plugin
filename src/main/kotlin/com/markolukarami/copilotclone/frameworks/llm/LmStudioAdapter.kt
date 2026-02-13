@@ -33,7 +33,8 @@ class LMStudioAdapter : ChatRepository {
         val req = OpenAiChatRequest(
             model = config.model,
             messages = messages.map { it.toOpenAi() },
-            temperature = 0.2,
+            temperature = config.temperature,
+            maxTokens = config.maxTokens,
         )
 
         val bodyStr = json.encodeToString(OpenAiChatRequest.serializer(), req)
@@ -70,7 +71,7 @@ class LMStudioAdapter : ChatRepository {
 
     private fun ChatMessage.toOpenAi(): OpenAiMessage {
         val roleString = when (role) {
-            ChatRole.SYSTEM -> "system"
+            ChatRole.SYSTEM -> "user"
             ChatRole.USER -> "user"
             ChatRole.ASSISTANT -> "assistant"
         }

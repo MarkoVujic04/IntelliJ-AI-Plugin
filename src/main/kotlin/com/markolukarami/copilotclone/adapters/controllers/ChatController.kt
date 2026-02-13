@@ -8,11 +8,13 @@ import com.markolukarami.copilotclone.adapters.presentation.TraceViewModel
 import com.markolukarami.copilotclone.application.usecase.ChatHandler
 import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatRole
+import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import com.markolukarami.copilotclone.domain.repositories.ChatSessionRepository
 
 data class ChatControllerResult(
     val chatItems: List<ChatViewModel>,
-    val trace: TraceViewModel
+    val trace: TraceViewModel,
+    val patch: PatchPlan? = null
 )
 
 class ChatController (
@@ -34,6 +36,8 @@ class ChatController (
 
         val result = chatHandler.execute(trimmed)
 
+        println("PATCH? " + (result.patch != null))
+
         val sessionId = chatSessionRepository.getActiveSessionId()
         chatSessionRepository.appendMessage(sessionId, ChatMessage(ChatRole.USER, trimmed))
         chatSessionRepository.appendMessage(sessionId, ChatMessage(ChatRole.ASSISTANT, result.assistantText))
@@ -43,7 +47,8 @@ class ChatController (
 
         return ChatControllerResult(
             chatItems = listOf(userVm, aiVm),
-            trace = traceVm
+            trace = traceVm,
+            patch = result.patch
         )
     }
 }

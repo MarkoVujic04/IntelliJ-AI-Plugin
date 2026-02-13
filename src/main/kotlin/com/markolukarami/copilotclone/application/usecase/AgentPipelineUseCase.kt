@@ -23,8 +23,8 @@ class AgentPipelineUseCase(
         val plan = planner.plan(userText, config, trace)
         val evidence = scout.gather(plan, userText, trace)
         val selected = strategist.select(evidence, trace)
-        val answer = executor.executeFinal(userText, config, selected, trace)
 
-        return ChatResult(answer, trace)
+        val result = executor.executeFinal(userText, config, selected, trace)
+        return result
     }
 }

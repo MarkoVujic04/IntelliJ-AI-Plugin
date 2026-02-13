@@ -18,6 +18,9 @@ object PatchParser {
             try {
                 val parsed = gson.fromJson(candidate, PatchPlan::class.java)
                 if (!parsed?.files.isNullOrEmpty()) return parsed
+
+                val hasAnyEdits = parsed.files.any { it.edits.isNotEmpty() }
+                if (hasAnyEdits) return parsed
             } catch (_: JsonSyntaxException) {
             }
         }

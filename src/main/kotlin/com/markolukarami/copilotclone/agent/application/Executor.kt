@@ -1,5 +1,6 @@
 package com.markolukarami.copilotclone.agent.application
 
+import com.intellij.openapi.project.Project
 import com.markolukarami.copilotclone.application.patch.PatchParser
 import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatResult
@@ -12,7 +13,8 @@ import com.markolukarami.copilotclone.domain.repositories.EditorContextRepositor
 
 class Executor(
     private val chatRepository: ChatRepository,
-    private val editorContextRepository: EditorContextRepository
+    private val editorContextRepository: EditorContextRepository,
+    private val project: Project,
 ) {
 
     private fun isPatchRequest(userText: String): Boolean {
@@ -26,48 +28,47 @@ class Executor(
                 t.contains("change the code")
     }
 
-    private fun buildPatchPrompt(userText: String, evidence: Strategist.SelectedEvidence): String {
-        val fileContent = evidence.files.firstOrNull()?.content ?: ""
+    private fun buildPatchPrompt(userText: String, evidence: Strategist.SelectedEvidence, projectBasePath: String): String {
+        val file = evidence.files.firstOrNull()
+        val abs = file?.filePath ?: ""
+        val rel = abs
+            .replace('\\', '/')
+            .removePrefix(projectBasePath.replace('\\','/').trimEnd('/') + "/")
+
+        val content = file?.content ?: ""
 
         return """
-You must reply with ONLY a JSON object.
-Start with "{" and end with "}".
-No other text.
+You must reply with ONLY a JSON object. No markdown. No extra text.
 
-Schema:
+Return this schema:
 {
   "summary": "short description",
   "files": [
     {
-      "relativePath": "src/main/java/.../SudokuModel.java",
-      "summary": "...",
-      "files": [
-        {
-            "relativePath": "...",
-            "edits": [
-                {
-                    "search": "public void reset(",
-                    "replace": "public void preset("
-                }
-            ]
-        }
+      "relativePath": "$rel",
+      "edits": [
+        { "search": "...", "replace": "..." }
       ]
     }
   ]
 }
 
 Rules:
-- relativePath is relative to project root (no absolute paths).
-- start/end are character offsets into EXACT file content below.
-- If you cannot compute offsets, return: {"summary":"...","files":[]}
+- Use EXACTLY the relativePath shown above. Do NOT change it.
+- Only change what the user asked. No formatting, no renames of other fields.
+- edits must be [] if no safe change.
 
 USER REQUEST:
 $userText
 
-FILE CONTENT:
-$fileContent
+FILE (use this path exactly):
+RELATIVE PATH: $rel
+
+CONTENT (exact):
+$content
 """.trimIndent()
     }
+
 
     fun executeFinal(
         userText: String,
@@ -81,7 +82,8 @@ $fileContent
         if (patchMode) {
             trace += TraceStep("Agent: Executor", "Patch-mode JSON call", TraceType.MODEL)
 
-            val patchPrompt = buildPatchPrompt(userText, evidence)
+            val basePath = project.basePath ?: ""
+            val patchPrompt = buildPatchPrompt(userText, evidence, basePath)
 
             val patchMessages = listOf(
                 ChatMessage(ChatRole.USER, patchPrompt)
@@ -89,7 +91,7 @@ $fileContent
 
             val patchConfig = config.copy(
                 temperature = 0.0,
-                maxTokens = 300
+                maxTokens = 800
             )
 
             val raw1 = chatRepository.chat(patchConfig, patchMessages)

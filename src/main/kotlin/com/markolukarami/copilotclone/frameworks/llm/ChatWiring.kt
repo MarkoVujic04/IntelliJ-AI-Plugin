@@ -43,7 +43,8 @@ object ChatWiring {
         )
         val executor = Executor(
             chatRepository = chatRepo,
-            editorContextRepository = editorRepo
+            editorContextRepository = editorRepo,
+            project = project,
         )
 
         val pipeline = AgentPipelineUseCase(

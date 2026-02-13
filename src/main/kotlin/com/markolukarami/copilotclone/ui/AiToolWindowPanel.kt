@@ -327,8 +327,9 @@ class AiToolWindowPanel(private val project: Project) {
             border = JBUI.Borders.emptyLeft(6)
             addMouseListener(object : java.awt.event.MouseAdapter() {
                 override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                    //TODO Remove Functionality
-                    append("Remove chip clicked (wire up remove in UserContextState): ${cf.path}\n")
+                    userContextState.remove(cf.path)
+                    refreshContextChips()
+                    append("Removed from context: ${cf.path}\n\n")
                 }
             })
         }

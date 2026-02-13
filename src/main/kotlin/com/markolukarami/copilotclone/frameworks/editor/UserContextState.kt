@@ -21,4 +21,13 @@ class UserContextState : UserContextRepository {
     override fun clear() {
         selected = emptyList()
     }
+
+    override fun remove(path: String) {
+        val normalized = normalize(path)
+        val next = getSelectedContextFiles().filterNot { normalize(it.path) == normalized }
+        setSelectedContextFiles(next)
+    }
+
+    private fun normalize(path: String): String =
+        path.replace('\\', '/')
 }

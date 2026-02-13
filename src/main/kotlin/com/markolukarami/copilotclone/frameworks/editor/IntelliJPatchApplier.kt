@@ -25,52 +25,40 @@ class IntelliJPatchApplier(private val project: Project) : PatchApplierRepositor
                     val target = File(baseDirectory, filePatch.relativePath).canonicalFile
 
                     if (!target.path.startsWith(baseDirectory.path)) {
-                        println("Patch blocked (outside project): ${target.path}")
                         continue
                     }
 
                     val vFile = LocalFileSystem.getInstance().findFileByIoFile(target)
                     if (vFile == null) {
-                        println("File not found in VFS: ${target.path}")
                         continue
                     }
 
                     val document = FileDocumentManager.getInstance().getDocument(vFile)
                     if (document == null) {
-                        println("No document for file: ${target.path}")
                         continue
                     }
-
-                    println("---- APPLY PATCH FILE ----")
-                    println("Target: ${target.path}")
-                    println("Edits: ${filePatch.edits.size}")
 
                     for (edit in filePatch.edits) {
                         val search = edit.search
                         val replace = edit.replace
 
                         if (search.isBlank()) {
-                            println("Skipped edit with blank search.")
                             continue
                         }
 
                         val currentText = document.text
                         val index = currentText.indexOf(search)
 
-                        println("Edit search='${short(search)}' index=$index")
 
                         if (index == -1) {
-                            println("Search string not found. Skipping.")
                             continue
                         }
 
                         document.replaceString(index, index + search.length, replace)
-                        println("Applied replacement at [$index, ${index + search.length})")
                     }
 
                     PsiDocumentManager.getInstance(project).commitDocument(document)
                     FileDocumentManager.getInstance().saveDocument(document)
-                    println("---- DONE FILE ----")
                 }
             }
     }

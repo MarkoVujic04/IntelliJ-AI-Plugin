@@ -36,8 +36,6 @@ class ChatController (
 
         val result = chatHandler.execute(trimmed)
 
-        println("PATCH? " + (result.patch != null))
-
         val sessionId = chatSessionRepository.getActiveSessionId()
         chatSessionRepository.appendMessage(sessionId, ChatMessage(ChatRole.USER, trimmed))
         chatSessionRepository.appendMessage(sessionId, ChatMessage(ChatRole.ASSISTANT, result.assistantText))

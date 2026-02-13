@@ -5,7 +5,6 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.util.xmlb.XmlSerializerUtil
-import com.markolukarami.copilotclone.adapters.presentation.ChatViewModel
 import com.markolukarami.copilotclone.domain.entities.ModelConfig
 import com.markolukarami.copilotclone.domain.repositories.SettingsRepository
 

@@ -5,7 +5,6 @@ import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatResult
 import com.markolukarami.copilotclone.domain.entities.ChatRole
 import com.markolukarami.copilotclone.domain.entities.ModelConfig
-import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.ChatRepository

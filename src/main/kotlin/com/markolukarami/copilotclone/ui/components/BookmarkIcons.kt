@@ -1,6 +1,5 @@
 package com.markolukarami.copilotclone.ui.components
 
-
 import com.intellij.icons.AllIcons
 import javax.swing.Icon
 

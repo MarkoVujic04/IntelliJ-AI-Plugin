@@ -19,6 +19,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaUltimate("2025.2.4")
+        bundledPlugin("com.intellij.java")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

@@ -51,7 +51,7 @@ class PatchPreviewDialog(
         sb.append(p.summary).append("\n\n")
         sb.append("Files:\n")
         p.files.forEach { fp ->
-            sb.append("- ").append(fp.relativePath).append(" (edits=").append(fp.edits.size).append(")\n")
+            sb.append("- ").append(fp.relativePath).append(" (edits=").append(fp.operations.size).append(")\n")
         }
         sb.append("\nClick 'OK' to apply. You can undo with Ctrl+Z.\n")
         return sb.toString()

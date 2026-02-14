@@ -28,43 +28,72 @@ class Executor(
                 t.contains("change the code")
     }
 
-    private fun buildPatchPrompt(userText: String, evidence: Strategist.SelectedEvidence, projectBasePath: String): String {
+    private fun buildPatchPrompt(
+        userText: String,
+        evidence: Strategist.SelectedEvidence,
+        projectBasePath: String
+    ): String {
         val file = evidence.files.firstOrNull()
-        val abs = file?.filePath ?: ""
-        val rel = abs
-            .replace('\\', '/')
-            .removePrefix(projectBasePath.replace('\\','/').trimEnd('/') + "/")
-
+        val abs = (file?.filePath ?: "").replace('\\', '/')
+        val base = projectBasePath.replace('\\', '/').trimEnd('/') + "/"
+        val rel = abs.removePrefix(base)
         val content = file?.content ?: ""
 
         return """
-You must reply with ONLY a JSON object. No markdown. No extra text.
+You must reply with ONLY a single JSON object. No markdown. No extra text.
 
-Return this schema:
+Return this schema EXACTLY:
 {
   "summary": "short description",
   "files": [
     {
       "relativePath": "$rel",
-      "edits": [
-        { "search": "...", "replace": "..." }
+      "operations": [
+        {
+          "type": "RENAME_METHOD",
+          "oldName": "reset",
+          "newName": "preset"
+        }
       ]
     }
   ]
 }
 
 Rules:
-- Use EXACTLY the relativePath shown above. Do NOT change it.
-- Only change what the user asked. No formatting, no renames of other fields.
-- edits must be [] if no safe change.
+- Use EXACTLY this relativePath: "$rel"
+- Only include operations needed for the user's request.
+- Do NOT add extra formatting edits (no random tabs/spaces).
+- operations must be [] if you cannot safely apply.
+
+Supported operation types:
+
+1) RENAME_METHOD
+   { "type":"RENAME_METHOD", "oldName":"...", "newName":"..." }
+
+2) REMOVE_METHOD_BODY
+   { "type":"REMOVE_METHOD_BODY", "methodName":"..." }
+
+3) DELETE_METHOD
+   { "type":"DELETE_METHOD", "methodName":"..." }
+
+4) CREATE_METHOD  (Java only)
+   { "type":"CREATE_METHOD", "methodSource":"public void foo() { ... }" }
+
+5) TEXT_REPLACE  (fallback for anything)
+   { "type":"TEXT_REPLACE", "search":"EXACT TEXT", "replace":"..." }
+
+6) REWRITE_FILE  (last resort)
+   { "type":"REWRITE_FILE", "newContent":"FULL FILE CONTENT" }
+
+Prefer PSI operations (RENAME_METHOD / REMOVE_METHOD_BODY / DELETE_METHOD / CREATE_METHOD) when the file is Java.
 
 USER REQUEST:
 $userText
 
-FILE (use this path exactly):
-RELATIVE PATH: $rel
+FILE PATH (relative):
+$rel
 
-CONTENT (exact):
+FILE CONTENT (exact):
 $content
 """.trimIndent()
     }

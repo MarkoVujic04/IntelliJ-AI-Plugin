@@ -13,5 +13,9 @@ data class PatchOperation(
     val search: String? = null,
     val replace: String? = null,
 
-    val newContent: String? = null
+    val newContent: String? = null,
+
+    val position: String? = null,
+    val afterText: String? = null,
+    val statement: String? = null
 )

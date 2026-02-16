@@ -84,6 +84,23 @@ Supported operation types:
 
 6) REWRITE_FILE  (last resort)
    { "type":"REWRITE_FILE", "newContent":"FULL FILE CONTENT" }
+   
+7) INSERT_STATEMENT (Java PSI)
+
+{
+  "type":"INSERT_STATEMENT",
+  "methodName":"...",
+  "position":"START|END|AFTER_TEXT",
+  "afterText":"optional short unique snippet",
+  "statement":"valid Java statement ending with ;"
+}
+
+Rules:
+- If user says "at the end" -> position = "END"
+- If user says "at the start" -> position = "START"
+- If user says "after X" -> position = "AFTER_TEXT"
+- statement must be a single valid Java statement
+- Do NOT use TEXT_REPLACE if INSERT_STATEMENT can handle it
 
 Prefer PSI operations (RENAME_METHOD / REMOVE_METHOD_BODY / DELETE_METHOD / CREATE_METHOD) when the file is Java.
 

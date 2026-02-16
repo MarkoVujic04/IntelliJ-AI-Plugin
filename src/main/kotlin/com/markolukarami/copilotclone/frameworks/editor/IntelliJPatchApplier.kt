@@ -12,6 +12,8 @@ import com.markolukarami.copilotclone.domain.entities.patch.PatchOperation
 import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import com.markolukarami.copilotclone.domain.repositories.PatchApplierRepository
 import java.io.File
+import com.intellij.psi.util.PsiTreeUtil
+
 
 @Service(Service.Level.PROJECT)
 class IntelliJPatchApplier(private val project: Project) : PatchApplierRepository {
@@ -64,6 +66,7 @@ class IntelliJPatchApplier(private val project: Project) : PatchApplierRepositor
             "CREATE_METHOD" -> createMethod(psiFile, op)
             "TEXT_REPLACE" -> textReplace(vFile, op)
             "REWRITE_FILE" -> rewriteFile(vFile, op)
+            "INSERT_STATEMENT" -> insertStatement(psiFile, op)
             else -> false
         }
     }
@@ -149,6 +152,72 @@ class IntelliJPatchApplier(private val project: Project) : PatchApplierRepositor
         val document = FileDocumentManager.getInstance().getDocument(vFile) ?: return false
         document.setText(newContent)
         return true
+    }
+
+    private fun insertStatement(psiFile: PsiFile, op: PatchOperation): Boolean {
+        val methodName = op.methodName?.trim().orEmpty()
+        val position = op.position?.trim().orEmpty()
+        val stmtText = op.statement?.trim().orEmpty()
+
+        if (methodName.isBlank() || position.isBlank() || stmtText.isBlank()) {
+            println("INSERT_STATEMENT invalid params: method=$methodName pos=$position stmt=$stmtText")
+            return false
+        }
+
+        val cls = findFirstJavaClass(psiFile) ?: return false
+        val method = cls.methods.firstOrNull { it.name == methodName } ?: run {
+            println("INSERT_STATEMENT miss: method not found: $methodName")
+            return false
+        }
+
+        val body = method.body ?: run {
+            println("INSERT_STATEMENT miss: no body for $methodName")
+            return false
+        }
+
+        val factory = JavaPsiFacade.getElementFactory(project)
+        val newStmt = try {
+            factory.createStatementFromText(stmtText, method)
+        } catch (t: Throwable) {
+            println("INSERT_STATEMENT bad statement: ${t.message}")
+            return false
+        }
+
+        when (position) {
+            "START" -> {
+                val first = body.statements.firstOrNull()
+                if (first != null) body.addBefore(newStmt, first) else body.add(newStmt)
+                return true
+            }
+
+            "END" -> {
+                val rBrace = body.rBrace ?: run {
+                    println("INSERT_STATEMENT miss: no rBrace in $methodName")
+                    return false
+                }
+                body.addBefore(newStmt, rBrace)
+                return true
+            }
+
+            "AFTER_TEXT" -> {
+                val needle = op.afterText?.trim().orEmpty()
+                if (needle.isBlank()) return false
+
+                val anchor = body.statements.firstOrNull { it.text.contains(needle) }
+                    ?: run {
+                        println("INSERT_STATEMENT miss: afterText not found: $needle")
+                        return false
+                    }
+
+                body.addAfter(newStmt, anchor)
+                return true
+            }
+
+            else -> {
+                println("INSERT_STATEMENT invalid position=$position")
+                return false
+            }
+        }
     }
 
     private fun short(s: String, max: Int = 80): String =

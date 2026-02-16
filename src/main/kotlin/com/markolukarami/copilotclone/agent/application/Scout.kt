@@ -5,6 +5,7 @@ import com.markolukarami.copilotclone.domain.entities.tool.ToolPlan
 import com.markolukarami.copilotclone.domain.entities.tool.ToolType
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
+import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 import com.markolukarami.copilotclone.domain.repositories.FileReaderRepository
 import com.markolukarami.copilotclone.domain.repositories.TextSearchRepository
 import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
@@ -12,9 +13,9 @@ import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
 class Scout(
     private val textSearchRepository: TextSearchRepository,
     private val fileReaderRepository: FileReaderRepository,
-    private val userContextRepository: UserContextRepository
+    private val userContextRepository: UserContextRepository,
 ) {
-    fun gather(plan: ToolPlan, userText: String, trace: MutableList<TraceStep>): ScoutEvidence {
+    fun gather(plan: ToolPlan?, userText: String, trace: MutableList<TraceStep>): ScoutEvidence {
         trace += TraceStep("Agent: Scout", "Run tools from plan", TraceType.TOOL)
 
         val snippets = mutableListOf<com.markolukarami.copilotclone.domain.entities.TextSnippet>()
@@ -26,6 +27,23 @@ class Scout(
             selectedContext.take(5).forEach { path ->
                 fileReaderRepository.readFile(path)?.let { files += it }
             }
+        }
+
+        if (plan == null) {
+            val contextPaths = userContextRepository
+                .getSelectedContextFiles()
+                .map { it.path }
+                .distinct()
+
+            val contextFileSnippets = mutableListOf<com.markolukarami.copilotclone.domain.entities.FileSnippet>()
+            contextPaths.take(5).forEach { path ->
+                fileReaderRepository.readFile(path)?.let { contextFileSnippets += it }
+            }
+
+            return ScoutEvidence(
+                files = contextFileSnippets,
+                snippets = emptyList()
+            )
         }
 
         if (plan.useTools) {

@@ -5,7 +5,7 @@ import com.markolukarami.copilotclone.domain.entities.TextSnippet
 
 
 data class ScoutEvidence(
-    val snippets: List<TextSnippet>,
-    val files: List<FileSnippet>
+    val snippets: List<TextSnippet> = emptyList(),
+    val files: List<FileSnippet> = emptyList(),
 )
 

@@ -17,14 +17,38 @@ class AgentPipelineUseCase(
 ) : ChatHandler {
 
     override fun execute(userText: String): ChatResult {
+
         val trace = mutableListOf<TraceStep>()
         val config = settingsRepository.getModelConfig()
+
+        val patchMode = isPatchRequestAgent(userText)
+
+        if (patchMode) {
+            val evidence = scout.gather(
+                plan = null,
+                userText = userText,
+                trace = trace
+            )
+
+            val selected = strategist.select(evidence, trace)
+
+            return executor.executeFinal(
+                userText = userText,
+                config = config,
+                evidence = selected,
+                trace = trace
+            )
+        }
 
         val plan = planner.plan(userText, config, trace)
         val evidence = scout.gather(plan, userText, trace)
         val selected = strategist.select(evidence, trace)
 
-        val result = executor.executeFinal(userText, config, selected, trace)
-        return result
+        return executor.executeFinal(userText, config, selected, trace)
+    }
+
+    private fun isPatchRequestAgent(text: String): Boolean {
+        val t = text.lowercase()
+        return t.startsWith("apply") || t.contains("apply this") || t.contains("make this change")
     }
 }

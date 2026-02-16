@@ -12,8 +12,6 @@ import com.markolukarami.copilotclone.domain.entities.patch.PatchOperation
 import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import com.markolukarami.copilotclone.domain.repositories.PatchApplierRepository
 import java.io.File
-import com.intellij.psi.util.PsiTreeUtil
-
 
 @Service(Service.Level.PROJECT)
 class IntelliJPatchApplier(private val project: Project) : PatchApplierRepository {
@@ -28,198 +26,192 @@ class IntelliJPatchApplier(private val project: Project) : PatchApplierRepositor
 
                 val psiManager = PsiManager.getInstance(project)
                 val docManager = PsiDocumentManager.getInstance(project)
+                val factory = JavaPsiFacade.getElementFactory(project)
 
                 var appliedOps = 0
                 var missedOps = 0
 
                 for (filePatch in patch.files) {
-                    val target = File(baseDir, filePatch.relativePath).canonicalFile
-                    if (!target.path.startsWith(baseDir.path)) continue
+                    val rel = filePatch.relativePath.trim()
+                    if (rel.isBlank()) continue
+                    if (filePatch.operations.isEmpty()) continue
 
-                    val vFile = LocalFileSystem.getInstance().findFileByIoFile(target) ?: continue
+                    val targetIo = File(baseDir, rel).canonicalFile
+                    if (!targetIo.path.startsWith(baseDir.path)) continue
+
+                    val vFile = LocalFileSystem.getInstance().findFileByIoFile(targetIo) ?: continue
                     val psiFile = psiManager.findFile(vFile) ?: continue
 
-                    val document = FileDocumentManager.getInstance().getDocument(vFile)
-                    if (document != null) docManager.commitDocument(document)
+                    FileDocumentManager.getInstance().getDocument(vFile)?.let { doc ->
+                        docManager.commitDocument(doc)
+                    }
 
                     for (op in filePatch.operations) {
-                        val ok = applyOperation(psiFile, vFile, op)
+                        val ok = applyOperation(factory, psiFile, vFile, op)
                         if (ok) appliedOps++ else missedOps++
                     }
 
-                    CodeStyleManager.getInstance(project).reformat(psiFile)
+                    try {
+                        CodeStyleManager.getInstance(project).reformat(psiFile)
+                    } catch (_: Throwable) {
+                    }
+
                     docManager.commitAllDocuments()
 
-                    val docToSave = FileDocumentManager.getInstance().getDocument(vFile)
-                    if (docToSave != null) FileDocumentManager.getInstance().saveDocument(docToSave)
+                    FileDocumentManager.getInstance().getDocument(vFile)?.let { doc ->
+                        FileDocumentManager.getInstance().saveDocument(doc)
+                    }
                 }
 
                 println("PATCH RESULT: appliedOps=$appliedOps missedOps=$missedOps")
             }
     }
 
-    private fun applyOperation(psiFile: PsiFile, vFile: VirtualFile, op: PatchOperation): Boolean {
+    private fun applyOperation(
+        factory: PsiElementFactory,
+        psiFile: PsiFile,
+        vFile: VirtualFile,
+        op: PatchOperation
+    ): Boolean {
         return when (op.type) {
-            "RENAME_METHOD" -> renameMethod(psiFile, op)
-            "REMOVE_METHOD_BODY" -> removeMethodBody(psiFile, op)
-            "DELETE_METHOD" -> deleteMethod(psiFile, op)
-            "CREATE_METHOD" -> createMethod(psiFile, op)
-            "TEXT_REPLACE" -> textReplace(vFile, op)
-            "REWRITE_FILE" -> rewriteFile(vFile, op)
-            "INSERT_STATEMENT" -> insertStatement(psiFile, op)
+
+            "RENAME_METHOD" -> {
+                val oldName = op.oldName?.trim().orEmpty()
+                val newName = op.newName?.trim().orEmpty()
+                if (oldName.isBlank() || newName.isBlank()) return false
+
+                val m = PsiTargetResolver.findMethodByName(psiFile, oldName) ?: return false
+                m.setName(newName)
+                true
+            }
+
+            "REMOVE_METHOD_BODY" -> {
+                val name = op.methodName?.trim().orEmpty()
+                if (name.isBlank()) return false
+
+                val m = PsiTargetResolver.findMethodByName(psiFile, name) ?: return false
+                val body = m.body ?: return false
+                val empty = factory.createCodeBlockFromText("{\n}", m)
+                body.replace(empty)
+                true
+            }
+
+            "DELETE_METHOD" -> {
+                val name = op.methodName?.trim().orEmpty()
+                if (name.isBlank()) return false
+
+                val m = PsiTargetResolver.findMethodByName(psiFile, name) ?: return false
+                m.delete()
+                true
+            }
+
+            "CREATE_METHOD" -> {
+                val src = listOf(
+                    op.methodSource,
+                    op.newSource,
+                    op.newContent
+                ).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
+
+                if (src.isBlank()) {
+                    println("CREATE_METHOD missing method source (methodSource/newSource/newContent all blank)")
+                    return false
+                }
+
+                val cls = PsiTargetResolver.findFirstClass(psiFile) ?: return false
+
+                val newMethod = try {
+                    factory.createMethodFromText(src, cls)
+                } catch (t: Throwable) {
+                    println("CREATE_METHOD parse failed: ${t.message}")
+                    return false
+                }
+
+                cls.add(newMethod)
+                true
+            }
+
+            "REWRITE_METHOD" -> {
+                val name = op.methodName?.trim().orEmpty()
+                val src = op.newSource?.trim().orEmpty()
+                if (name.isBlank() || src.isBlank()) return false
+
+                val oldMethod = PsiTargetResolver.findMethodByName(psiFile, name) ?: return false
+                val cls = PsiTargetResolver.findFirstClass(psiFile) ?: return false
+
+                val newMethod = try {
+                    factory.createMethodFromText(src, cls)
+                } catch (t: Throwable) {
+                    println("REWRITE_METHOD parse failed: ${t.message}")
+                    return false
+                }
+
+                oldMethod.replace(newMethod)
+                true
+            }
+
+            "INSERT_STATEMENT" -> {
+                val methodName = op.methodName?.trim().orEmpty()
+                val position = op.position?.trim().orEmpty()
+                val stmtText = op.statement?.trim().orEmpty()
+                if (methodName.isBlank() || position.isBlank() || stmtText.isBlank()) return false
+
+                val m = PsiTargetResolver.findMethodByName(psiFile, methodName) ?: return false
+                val body = m.body ?: return false
+
+                val stmt = try {
+                    factory.createStatementFromText(stmtText, m)
+                } catch (t: Throwable) {
+                    println("INSERT_STATEMENT bad statement: ${t.message}")
+                    return false
+                }
+
+                when (position) {
+                    "START" -> {
+                        val first = body.statements.firstOrNull()
+                        if (first != null) body.addBefore(stmt, first) else body.add(stmt)
+                        true
+                    }
+
+                    "END" -> {
+                        val rBrace = body.rBrace ?: return false
+                        body.addBefore(stmt, rBrace)
+                        true
+                    }
+
+                    "AFTER_TEXT" -> {
+                        val needle = op.afterText?.trim().orEmpty()
+                        if (needle.isBlank()) return false
+
+                        val anchor = body.statements.firstOrNull { it.text.contains(needle) }
+                            ?: return false
+
+                        body.addAfter(stmt, anchor)
+                        true
+                    }
+
+                    else -> false
+                }
+            }
+
+            "TEXT_REPLACE" -> {
+                val search = op.search ?: return false
+                val replace = op.replace ?: ""
+                val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return false
+                val idx = doc.text.indexOf(search)
+                if (idx == -1) return false
+                doc.replaceString(idx, idx + search.length, replace)
+                true
+            }
+
+            "REWRITE_FILE" -> {
+                val newContent = op.newContent ?: return false
+                val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return false
+                doc.setText(newContent)
+                true
+            }
+
             else -> false
         }
     }
-
-    private fun renameMethod(psiFile: PsiFile, op: PatchOperation): Boolean {
-        val oldName = op.oldName?.trim().orEmpty()
-        val newName = op.newName?.trim().orEmpty()
-        if (oldName.isBlank() || newName.isBlank()) return false
-
-        val cls = findFirstJavaClass(psiFile) ?: return false
-        val method = cls.methods.firstOrNull { it.name == oldName } ?: return false
-        method.setName(newName)
-        return true
-    }
-
-    private fun removeMethodBody(psiFile: PsiFile, op: PatchOperation): Boolean {
-        val name = op.methodName?.trim().orEmpty()
-        if (name.isBlank()) return false
-
-        val cls = findFirstJavaClass(psiFile) ?: return false
-        val method = cls.methods.firstOrNull { it.name == name } ?: return false
-
-        val factory = JavaPsiFacade.getElementFactory(project)
-        val emptyBody = factory.createCodeBlockFromText("{\n}", method)
-
-        val body = method.body ?: return false
-        body.replace(emptyBody)
-        return true
-    }
-
-    private fun deleteMethod(psiFile: PsiFile, op: PatchOperation): Boolean {
-        val name = op.methodName?.trim().orEmpty()
-        if (name.isBlank()) return false
-
-        val cls = findFirstJavaClass(psiFile) ?: return false
-        val method = cls.methods.firstOrNull { it.name == name } ?: return false
-        method.delete()
-        return true
-    }
-
-    private fun createMethod(psiFile: PsiFile, op: PatchOperation): Boolean {
-        val src = op.methodSource?.trim().orEmpty()
-        if (src.isBlank()) return false
-
-        val cls = findFirstJavaClass(psiFile) ?: return false
-        val factory = JavaPsiFacade.getElementFactory(project)
-
-        val newMethod = try {
-            factory.createMethodFromText(src, cls)
-        } catch (t: Throwable) {
-            println("CREATE_METHOD failed: ${t.message}")
-            return false
-        }
-
-        cls.add(newMethod)
-        return true
-    }
-
-    private fun findFirstJavaClass(psiFile: PsiFile): PsiClass? {
-        return when (psiFile) {
-            is PsiJavaFile -> psiFile.classes.firstOrNull()
-            else -> psiFile.children.filterIsInstance<PsiClass>().firstOrNull()
-        }
-    }
-
-    private fun textReplace(vFile: VirtualFile, op: PatchOperation): Boolean {
-        val search = op.search ?: return false
-        val replace = op.replace ?: ""
-
-        val document = FileDocumentManager.getInstance().getDocument(vFile) ?: return false
-        val idx = document.text.indexOf(search)
-        if (idx == -1) {
-            println("TEXT_REPLACE MISS: " + short(search))
-            return false
-        }
-
-        document.replaceString(idx, idx + search.length, replace)
-        return true
-    }
-
-    private fun rewriteFile(vFile: VirtualFile, op: PatchOperation): Boolean {
-        val newContent = op.newContent ?: return false
-        val document = FileDocumentManager.getInstance().getDocument(vFile) ?: return false
-        document.setText(newContent)
-        return true
-    }
-
-    private fun insertStatement(psiFile: PsiFile, op: PatchOperation): Boolean {
-        val methodName = op.methodName?.trim().orEmpty()
-        val position = op.position?.trim().orEmpty()
-        val stmtText = op.statement?.trim().orEmpty()
-
-        if (methodName.isBlank() || position.isBlank() || stmtText.isBlank()) {
-            println("INSERT_STATEMENT invalid params: method=$methodName pos=$position stmt=$stmtText")
-            return false
-        }
-
-        val cls = findFirstJavaClass(psiFile) ?: return false
-        val method = cls.methods.firstOrNull { it.name == methodName } ?: run {
-            println("INSERT_STATEMENT miss: method not found: $methodName")
-            return false
-        }
-
-        val body = method.body ?: run {
-            println("INSERT_STATEMENT miss: no body for $methodName")
-            return false
-        }
-
-        val factory = JavaPsiFacade.getElementFactory(project)
-        val newStmt = try {
-            factory.createStatementFromText(stmtText, method)
-        } catch (t: Throwable) {
-            println("INSERT_STATEMENT bad statement: ${t.message}")
-            return false
-        }
-
-        when (position) {
-            "START" -> {
-                val first = body.statements.firstOrNull()
-                if (first != null) body.addBefore(newStmt, first) else body.add(newStmt)
-                return true
-            }
-
-            "END" -> {
-                val rBrace = body.rBrace ?: run {
-                    println("INSERT_STATEMENT miss: no rBrace in $methodName")
-                    return false
-                }
-                body.addBefore(newStmt, rBrace)
-                return true
-            }
-
-            "AFTER_TEXT" -> {
-                val needle = op.afterText?.trim().orEmpty()
-                if (needle.isBlank()) return false
-
-                val anchor = body.statements.firstOrNull { it.text.contains(needle) }
-                    ?: run {
-                        println("INSERT_STATEMENT miss: afterText not found: $needle")
-                        return false
-                    }
-
-                body.addAfter(newStmt, anchor)
-                return true
-            }
-
-            else -> {
-                println("INSERT_STATEMENT invalid position=$position")
-                return false
-            }
-        }
-    }
-
-    private fun short(s: String, max: Int = 80): String =
-        if (s.length <= max) s else s.take(max) + "…"
 }
+

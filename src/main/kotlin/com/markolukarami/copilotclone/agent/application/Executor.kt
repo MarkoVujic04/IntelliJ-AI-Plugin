@@ -39,6 +39,14 @@ class Executor(
         val rel = abs.removePrefix(base)
         val content = file?.content ?: ""
 
+        val methodName = guessMethodName(userText)
+        val extractedMethod = if (methodName != null) extractJavaMethodBlock(content, methodName) else null
+
+        val contextBlock = when {
+            extractedMethod != null -> "METHOD SOURCE (exact):\n$extractedMethod"
+            else -> "FILE CONTENT (exact):\n$content"
+        }
+
         return """
 You must reply with ONLY a single JSON object. No markdown. No extra text.
 
@@ -50,9 +58,9 @@ Return this schema EXACTLY:
       "relativePath": "$rel",
       "operations": [
         {
-          "type": "RENAME_METHOD",
-          "oldName": "reset",
-          "newName": "preset"
+          "type": "REWRITE_METHOD",
+          "methodName": "methodNameHere",
+          "newSource": "full updated method source here"
         }
       ]
     }
@@ -61,48 +69,46 @@ Return this schema EXACTLY:
 
 Rules:
 - Use EXACTLY this relativePath: "$rel"
-- Only include operations needed for the user's request.
-- Do NOT add extra formatting edits (no random tabs/spaces).
-- operations must be [] if you cannot safely apply.
+- operations must be an array (use [] if you cannot safely do it).
+- Do NOT include unrelated formatting changes.
+- Prefer REWRITE_METHOD for ANY method content changes:
+  - insert statements
+  - add return at end
+  - remove method body contents
+  - delete a method (use DELETE_METHOD)
+- newSource MUST be the ENTIRE method (signature + body), valid programming language.
+IMPORTANT:
+- If the requested method does NOT already exist in the file, use CREATE_METHOD.
+- NEVER use REWRITE_METHOD to create a new method.
+- REWRITE_METHOD is only allowed if the method already exists.
 
 Supported operation types:
 
-1) RENAME_METHOD
-   { "type":"RENAME_METHOD", "oldName":"...", "newName":"..." }
+1) REWRITE_METHOD
+   { "type":"REWRITE_METHOD", "methodName":"...", "newSource":"public ... { ... }" }
 
-2) REMOVE_METHOD_BODY
-   { "type":"REMOVE_METHOD_BODY", "methodName":"..." }
+2) RENAME_METHOD
+   { "type":"RENAME_METHOD", "oldName":"...", "newName":"..." }
 
 3) DELETE_METHOD
    { "type":"DELETE_METHOD", "methodName":"..." }
 
-4) CREATE_METHOD  (Java only)
-   { "type":"CREATE_METHOD", "methodSource":"public void foo() { ... }" }
-
-5) TEXT_REPLACE  (fallback for anything)
-   { "type":"TEXT_REPLACE", "search":"EXACT TEXT", "replace":"..." }
-
-6) REWRITE_FILE  (last resort)
+4) REWRITE_FILE (last resort)
    { "type":"REWRITE_FILE", "newContent":"FULL FILE CONTENT" }
+
+5) TEXT_REPLACE (fallback)
+   { "type":"TEXT_REPLACE", "search":"EXACT TEXT", "replace":"..." }
    
-7) INSERT_STATEMENT (Java PSI)
+6) CREATE_METHOD 
+   { "type":"CREATE_METHOD", "methodSource":"public return type foo() { ... }" }
 
-{
-  "type":"INSERT_STATEMENT",
-  "methodName":"...",
-  "position":"START|END|AFTER_TEXT",
-  "afterText":"optional short unique snippet",
-  "statement":"valid Java statement ending with ;"
-}
+Rules for CREATE_METHOD:
+- Put the entire method code in methodSource.
+- Do NOT use methodName or newSource for CREATE_METHOD.
 
-Rules:
-- If user says "at the end" -> position = "END"
-- If user says "at the start" -> position = "START"
-- If user says "after X" -> position = "AFTER_TEXT"
-- statement must be a single valid Java statement
-- Do NOT use TEXT_REPLACE if INSERT_STATEMENT can handle it
 
-Prefer PSI operations (RENAME_METHOD / REMOVE_METHOD_BODY / DELETE_METHOD / CREATE_METHOD) when the file is Java.
+If the request is about adding a statement "after X" or "at the end":
+- still use REWRITE_METHOD and place it correctly inside the method.
 
 USER REQUEST:
 $userText
@@ -110,11 +116,9 @@ $userText
 FILE PATH (relative):
 $rel
 
-FILE CONTENT (exact):
-$content
+$contextBlock
 """.trimIndent()
     }
-
 
     fun executeFinal(
         userText: String,
@@ -214,4 +218,35 @@ $content
         val answer = chatRepository.chat(config, finalMessages)
         return ChatResult(answer, trace, patch = null)
     }
+
+    private fun guessMethodName(userText: String): String? {
+        val regex = Regex("""method\s+"?([A-Za-z_][A-Za-z0-9_]*)"?""", RegexOption.IGNORE_CASE)
+        return regex.find(userText)?.groupValues?.getOrNull(1)
+    }
+
+    private fun extractJavaMethodBlock(fileText: String, methodName: String): String? {
+        val idx = fileText.indexOf("$methodName(")
+        if (idx == -1) return null
+
+        var start = idx
+        while (start > 0 && fileText[start - 1] != '\n') start--
+
+        val braceOpen = fileText.indexOf('{', idx)
+        if (braceOpen == -1) return null
+
+        var depth = 0
+        for (i in braceOpen until fileText.length) {
+            when (fileText[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return fileText.substring(start, i + 1)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
 }

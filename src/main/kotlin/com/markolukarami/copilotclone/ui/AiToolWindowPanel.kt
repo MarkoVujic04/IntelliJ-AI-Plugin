@@ -82,6 +82,7 @@ class AiToolWindowPanel(private val project: Project) {
     }
 
     private val tracePanel = TracePanel(project)
+    private val instructionsPanel = InstructionsPanel()
 
     private val contextChipsRow = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
         isOpaque = false
@@ -105,9 +106,11 @@ class AiToolWindowPanel(private val project: Project) {
             add(bottom, BorderLayout.SOUTH)
         }
 
+
         val tabs = JTabbedPane().apply {
             addTab("Chat", chatView)
             addTab("Trace", tracePanel.component)
+            addTab("Instructions", instructionsPanel)
         }
 
         val newChatButton = JButton("New Chat").apply {
@@ -118,14 +121,11 @@ class AiToolWindowPanel(private val project: Project) {
 
         tabs.setTabComponentAt(0, JBLabel("Chat"))
 
-        tabs.setTabComponentAt(1, BorderLayoutPanel().apply {
+        tabs.setTabComponentAt(1, JBLabel("Trace"))
+
+        tabs.setTabComponentAt(2, BorderLayoutPanel().apply {
             isOpaque = false
-
-            val traceLabel = JBLabel("Trace").apply {
-                border = JBUI.Borders.emptyRight(220)
-            }
-
-            addToLeft(traceLabel)
+            addToLeft(JBLabel("Instructions"))
             addToRight(newChatButton)
         })
 

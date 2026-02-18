@@ -10,11 +10,13 @@ import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.ChatRepository
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
+import com.markolukarami.copilotclone.frameworks.instructions.AgentsMdService
 
 class Executor(
     private val chatRepository: ChatRepository,
     private val editorContextRepository: EditorContextRepository,
     private val project: Project,
+    private val agentsMdService: AgentsMdService,
 ) {
 
     private fun isPatchRequest(userText: String): Boolean {
@@ -38,6 +40,7 @@ class Executor(
         val base = projectBasePath.replace('\\', '/').trimEnd('/') + "/"
         val rel = abs.removePrefix(base)
         val content = file?.content ?: ""
+        val agents = agentsMdService.getInstructionsOrNull()
 
         val methodName = guessMethodName(userText)
         val extractedMethod = if (methodName != null) extractJavaMethodBlock(content, methodName) else null
@@ -48,6 +51,7 @@ class Executor(
         }
 
         return """
+$agents
 You must reply with ONLY a single JSON object. No markdown. No extra text.
 
 Return this schema EXACTLY:
@@ -141,7 +145,7 @@ $contextBlock
 
             val patchConfig = config.copy(
                 temperature = 0.0,
-                maxTokens = 800
+                maxTokens = 900
             )
 
             val raw1 = chatRepository.chat(patchConfig, patchMessages)
@@ -186,9 +190,16 @@ $contextBlock
 
         trace += TraceStep("Agent: Executor", "Normal answer mode", TraceType.MODEL)
 
-        val finalMessages = mutableListOf(
-            ChatMessage(ChatRole.SYSTEM, "You are a helpful IntelliJ coding assistant.")
-        )
+        val finalMessages = mutableListOf<ChatMessage>()
+
+        agentsMdService.getInstructionsOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { agents ->
+                finalMessages += ChatMessage(ChatRole.SYSTEM, agents)
+            }
+
+        finalMessages += ChatMessage(ChatRole.SYSTEM, "You are a helpful IntelliJ coding assistant.")
 
         val editorContext = editorContextRepository.getCurrentContext()
         editorContext.selectedText?.let {

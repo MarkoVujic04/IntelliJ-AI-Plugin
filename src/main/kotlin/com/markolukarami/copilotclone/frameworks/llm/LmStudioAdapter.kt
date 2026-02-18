@@ -27,14 +27,14 @@ class LMStudioAdapter : ChatRepository {
         isLenient = true
     }
 
-    override fun chat(config: ModelConfig, messages: List<ChatMessage>): String {
-        val url = config.baseUrl.removeSuffix("/") + "/v1/chat/completions"
+    override fun chat(modelConfig: ModelConfig, messages: List<ChatMessage>): String {
+        val url = modelConfig.baseUrl.removeSuffix("/") + "/v1/chat/completions"
 
         val req = OpenAiChatRequest(
-            model = config.model,
+            model = modelConfig.model,
             messages = messages.map { it.toOpenAi() },
-            temperature = config.temperature,
-            maxTokens = config.maxTokens,
+            temperature = modelConfig.temperature,
+            maxTokens = modelConfig.maxTokens,
         )
 
         val bodyStr = json.encodeToString(OpenAiChatRequest.serializer(), req)
@@ -75,6 +75,15 @@ class LMStudioAdapter : ChatRepository {
             ChatRole.USER -> "user"
             ChatRole.ASSISTANT -> "assistant"
         }
-        return OpenAiMessage(role = roleString, content = content)
+
+        val contentString = when (role) {
+            ChatRole.SYSTEM -> {
+                "### SYSTEM INSTRUCTIONS (obey strictly)\n$content"
+            }
+            else -> content
+        }
+
+        return OpenAiMessage(role = roleString, content = contentString)
     }
+
 }

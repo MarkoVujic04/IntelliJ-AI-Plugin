@@ -21,6 +21,7 @@ import com.intellij.util.ui.components.BorderLayoutPanel
 import com.intellij.ui.JBColor
 import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJPatchApplier
+import com.markolukarami.copilotclone.frameworks.editor.PatchEnricher
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
@@ -361,7 +362,8 @@ class AiToolWindowPanel(private val project: Project) {
 
                     val patch = result.patch
                     if (patch != null) {
-                        PatchPreviewDialog(project, patch) {
+                        val enrichedPatch = PatchEnricher(project).enrichPatch(patch)
+                        PatchPreviewDialog(project, enrichedPatch) {
                             project.service<IntelliJPatchApplier>().apply(patch)
                             append("Patch applied (undo with Ctrl+Z)\n\n")
                         }.show()

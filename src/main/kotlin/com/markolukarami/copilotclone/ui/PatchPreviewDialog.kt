@@ -3,13 +3,13 @@ package com.markolukarami.copilotclone.ui
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import com.markolukarami.copilotclone.domain.entities.patch.PatchPlan
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTextPane
 
 class PatchPreviewDialog(
     project: Project,
@@ -23,16 +23,14 @@ class PatchPreviewDialog(
     }
 
     override fun createCenterPanel(): JComponent? {
-        val area = JBTextArea().apply {
+        val pane = JTextPane().apply {
             isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            text = buildPreview(patch)
+            document = DiffRenderer.createStyledDocument(patch.summary, patch.files)
             border = JBUI.Borders.empty(8)
         }
 
-        val scroll = JBScrollPane(area).apply {
-            preferredSize = Dimension(720, 420)
+        val scroll = JBScrollPane(pane).apply {
+            preferredSize = Dimension(800, 500)
         }
 
         return JPanel(BorderLayout()).apply {
@@ -43,17 +41,5 @@ class PatchPreviewDialog(
     override fun doOKAction() {
         onApply()
         super.doOKAction()
-    }
-
-    private fun buildPreview(p: PatchPlan): String {
-        val sb = StringBuilder()
-        sb.append("Summary:\n")
-        sb.append(p.summary).append("\n\n")
-        sb.append("Files:\n")
-        p.files.forEach { fp ->
-            sb.append("- ").append(fp.relativePath).append(" (edits=").append(fp.operations.size).append(")\n")
-        }
-        sb.append("\nClick 'OK' to apply. You can undo with Ctrl+Z.\n")
-        return sb.toString()
     }
 }

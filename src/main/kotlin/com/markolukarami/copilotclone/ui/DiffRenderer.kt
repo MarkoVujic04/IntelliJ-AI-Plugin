@@ -7,12 +7,6 @@ import javax.swing.text.DefaultStyledDocument
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 
-/**
- * Utility class to render diffs with color highlighting for patch previews.
- * - Green text for added code
- * - Red text for removed code
- * - Gray for context lines
- */
 object DiffRenderer {
 
     private val addedStyle = SimpleAttributeSet().apply {

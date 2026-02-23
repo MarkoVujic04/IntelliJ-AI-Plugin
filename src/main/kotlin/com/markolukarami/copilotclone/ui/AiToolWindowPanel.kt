@@ -120,6 +120,12 @@ class AiToolWindowPanel(private val project: Project) {
             addActionListener { onNewChat() }
         }
 
+        val chatHistoryButton = JButton("Chat History").apply {
+            isFocusable = false
+            putClientProperty("JButton.buttonType", "toolbutton")
+            addActionListener { onOpenChatHistory() }
+        }
+
         tabs.setTabComponentAt(0, JBLabel("Chat"))
 
         tabs.setTabComponentAt(1, JBLabel("Trace"))
@@ -127,7 +133,11 @@ class AiToolWindowPanel(private val project: Project) {
         tabs.setTabComponentAt(2, BorderLayoutPanel().apply {
             isOpaque = false
             addToLeft(JBLabel("Instructions"))
-            addToRight(newChatButton)
+            addToRight(JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(4), 0)).apply {
+                isOpaque = false
+                add(chatHistoryButton)
+                add(newChatButton)
+            })
         })
 
         add(tabs, BorderLayout.CENTER)
@@ -138,6 +148,34 @@ class AiToolWindowPanel(private val project: Project) {
         outputArea.text = ""
         tracePanel.setTraceLines(emptyList())
         append("New chat started.\n\n")
+    }
+
+    private fun onOpenChatHistory() {
+        ChatHistoryDialog(project, chatSessions) { selectedSession ->
+            loadChatSession(selectedSession.id)
+        }.show()
+    }
+
+    private fun loadChatSession(sessionId: String) {
+        chatSessions.setActiveSessionId(sessionId)
+        outputArea.text = ""
+        tracePanel.setTraceLines(emptyList())
+
+        val messages = chatSessions.getMessages(sessionId)
+        if (messages.isEmpty()) {
+            append("No messages in this chat.\n\n")
+        } else {
+            messages.forEach { message ->
+                val prefix = when (message.role) {
+                    com.markolukarami.copilotclone.domain.entities.ChatRole.USER -> "You"
+                    com.markolukarami.copilotclone.domain.entities.ChatRole.ASSISTANT -> "AI"
+                    com.markolukarami.copilotclone.domain.entities.ChatRole.SYSTEM -> "System"
+                }
+                append("$prefix: ${message.content}\n\n")
+            }
+        }
+
+        inputField.text = ""
     }
 
     private fun buildComposer(): JComponent {

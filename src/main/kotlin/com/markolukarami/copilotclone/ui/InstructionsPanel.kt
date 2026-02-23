@@ -32,7 +32,7 @@ Important Rules:
 
 • Changes only work when the prompt starts with "Apply this change:"
 • The context file must be selected
-• Only valid Java code will be applied
+• Only valid code will be applied
 • The plugin uses semantic PSI edits (Copilot-style)
 
 Normal questions without "Apply this change:" will NOT modify your code.

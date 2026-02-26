@@ -9,6 +9,7 @@ interface ChatSessionRepository {
 
     fun listSessions(): List<ChatSession>
     fun createNewSession(title: String = "New Chat"): ChatSession
+    fun deleteSession(sessionId: String)
 
     fun getMessages(sessionId: String): List<ChatMessage>
     fun appendMessage(sessionId: String, message: ChatMessage)

@@ -105,6 +105,13 @@ class ChatSessionState(private val project: Project) :
         s.messages.clear()
     }
 
+    override fun deleteSession(sessionId: String) {
+        state.sessions.removeIf { it.id == sessionId }
+        if (state.activeSessionId == sessionId) {
+            ensureActiveSession()
+        }
+    }
+
     init {
         ensureActiveSession()
     }

@@ -1,24 +1,16 @@
 package com.markolukarami.copilotclone.ui
 
-import com.intellij.icons.AllIcons
-import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
-import com.intellij.openapi.editor.Document
-import com.intellij.openapi.editor.EditorFactory
-import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.ui.EditorTextField
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
-import com.intellij.ui.JBColor
 import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJPatchApplier
 import com.markolukarami.copilotclone.frameworks.editor.PatchEnricher
@@ -26,17 +18,15 @@ import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
-import com.markolukarami.copilotclone.ui.components.BookmarkIcons
+import com.markolukarami.copilotclone.ui.components.ComposerPanel
+import com.markolukarami.copilotclone.ui.components.ContextChipsPanel
+import com.markolukarami.copilotclone.ui.components.InlineActionsBar
 import java.awt.BorderLayout
-import java.awt.Cursor
 import java.awt.Dimension
-import java.awt.FlowLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
-import javax.swing.SwingConstants
-import javax.swing.border.EmptyBorder
 
 class AiToolWindowPanel(private val project: Project) {
 
@@ -52,47 +42,22 @@ class AiToolWindowPanel(private val project: Project) {
         wrapStyleWord = true
     }
 
-    private val inputDocument: Document = EditorFactory.getInstance().createDocument("")
-    private val inputField = EditorTextField(
-        inputDocument,
-        project,
-        PlainTextFileType.INSTANCE
-    ).apply {
-        setOneLineMode(false)
-        setPlaceholder("Ask AI Assistant… Use # or @ for mentions and / for commands")
-
-        preferredSize = Dimension(0, 110)
-        minimumSize = Dimension(0, 110)
-
-        addSettingsProvider { editor ->
-            editor.settings.isUseSoftWraps = true
-            editor.settings.isCaretRowShown = false
-            editor.settings.isRightMarginShown = false
-            editor.settings.isLineNumbersShown = false
-            editor.settings.isFoldingOutlineShown = false
-            editor.setVerticalScrollbarVisible(true)
-            editor.setHorizontalScrollbarVisible(false)
-        }
-    }
-
-    private val sendButton = JButton(AllIcons.Actions.Execute).apply {
-        isFocusable = false
-        toolTipText = "Send"
-        putClientProperty("JButton.buttonType", "toolbutton")
-        addActionListener { onSend() }
-    }
-
     private val tracePanel = TracePanel(project)
     private val instructionsPanel = InstructionsPanel()
 
-    private val contextChipsRow = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
-        isOpaque = false
-        border = EmptyBorder(0, 0, 0, 0)
-    }
+    private val contextChipsPanel = ContextChipsPanel(
+        userContextState,
+        onRemoveFile = { filePath ->
+            append("Removed from context: $filePath\n\n")
+        }
+    )
 
-    private val composerToolbar: JComponent = createComposerToolbar()
+    private lateinit var composerPanel: ComposerPanel
+    private lateinit var inlineActionsBar: InlineActionsBar
 
-    val component: JComponent = JPanel(BorderLayout()).apply {
+    val component: JComponent = buildMainUI()
+
+    private fun buildMainUI(): JComponent {
         val chatView = JPanel(BorderLayout()).apply {
             val scroll = JBScrollPane(outputArea).apply {
                 preferredSize = Dimension(380, 500)
@@ -101,12 +66,11 @@ class AiToolWindowPanel(private val project: Project) {
 
             val bottom = JPanel(BorderLayout()).apply {
                 border = JBUI.Borders.empty(8)
-                add(buildComposer(), BorderLayout.CENTER)
+                add(buildComposerView(), BorderLayout.CENTER)
             }
 
             add(bottom, BorderLayout.SOUTH)
         }
-
 
         val tabs = JTabbedPane().apply {
             addTab("Chat", chatView)
@@ -127,20 +91,48 @@ class AiToolWindowPanel(private val project: Project) {
         }
 
         tabs.setTabComponentAt(0, JBLabel("Chat"))
-
         tabs.setTabComponentAt(1, JBLabel("Trace"))
-
         tabs.setTabComponentAt(2, BorderLayoutPanel().apply {
             isOpaque = false
             addToLeft(JBLabel("Instructions"))
-            addToRight(JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(4), 0)).apply {
+            addToRight(JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, JBUI.scale(4), 0)).apply {
                 isOpaque = false
                 add(chatHistoryButton)
                 add(newChatButton)
             })
         })
 
-        add(tabs, BorderLayout.CENTER)
+        return JPanel(BorderLayout()).apply {
+            add(tabs, BorderLayout.CENTER)
+        }
+    }
+
+    private fun buildComposerView(): JComponent {
+        inlineActionsBar = InlineActionsBar(
+            project = project,
+            onAddContext = { onPickContextFiles() },
+            currentInputGetter = { composerPanel.inputField.text },
+            currentInputSetter = { text -> composerPanel.inputField.text = text },
+            onContextFilesUpdated = {
+                contextChipsPanel.refresh()
+                val files = userContextState.getSelectedContextFiles().map { it.path }
+                append("Context files now (${files.size}):\n")
+                files.forEach { append("- $it\n") }
+                append("\n")
+            }
+        )
+
+        composerPanel = ComposerPanel(
+            project = project,
+            onSend = { text -> onSend(text) },
+            inlineActionsBar = inlineActionsBar,
+            contextChipsPanel = contextChipsPanel
+        )
+
+        inlineActionsBar.onPickModel = { anchor -> onPickModel(anchor) }
+
+        contextChipsPanel.refresh()
+        return composerPanel.component
     }
 
     private fun onNewChat() {
@@ -175,128 +167,12 @@ class AiToolWindowPanel(private val project: Project) {
             }
         }
 
-        inputField.text = ""
-    }
-
-    private fun buildComposer(): JComponent {
-        val composer = BorderLayoutPanel().apply {
-            isOpaque = true
-            background = JBColor.PanelBackground
-            border = JBUI.Borders.compound(
-                JBUI.Borders.customLine(JBColor.border(), 1),
-                JBUI.Borders.empty(8)
-            )
-        }
-
-        val chipsRow = BorderLayoutPanel().apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyBottom(6)
-            addToCenter(contextChipsRow.apply {
-                isOpaque = false
-            })
-        }
-
-        inputField.border = JBUI.Borders.empty()
-        inputField.isOpaque = false
-
-        val editorRow = BorderLayoutPanel().apply {
-            isOpaque = false
-            addToCenter(inputField)
-        }
-
-        val bottomRow = BorderLayoutPanel().apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyTop(6)
-            addToLeft(createInlineActions())
-            addToRight(sendButton)
-        }
-
-        composer.addToTop(chipsRow)
-        composer.addToCenter(editorRow)
-        composer.addToBottom(bottomRow)
-
-        refreshContextChips()
-        return composer
-    }
-
-    private fun createInlineActions(): JComponent {
-        val plus = JButton(AllIcons.General.Add).apply {
-            isFocusable = false
-            toolTipText = "Add context"
-            putClientProperty("JButton.buttonType", "toolbutton")
-            addActionListener { onPickContextFiles() }
-        }
-
-        val bookmark = JButton(BookmarkIcons.BOOKMARK).apply {
-            isFocusable = false
-            toolTipText = "Saved prompts"
-            putClientProperty("JButton.buttonType", "toolbutton")
-            addActionListener {
-                PromptLibraryPopup.show(
-                    project = project,
-                    anchor = this,
-                    currentInput = { inputField.text },
-                    onPick = { picked -> inputField.text = picked }
-                )
-            }
-        }
-
-        val modelButton = JButton(AllIcons.General.Settings).apply {
-            isFocusable = false
-            toolTipText = "Select model"
-            putClientProperty("JButton.buttonType", "toolbutton")
-            addActionListener { onPickModel(this) }
-        }
-
-        return JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
-            isOpaque = false
-            add(plus)
-            add(bookmark)
-            add(modelButton)
-        }
-    }
-
-
-    private fun createComposerToolbar(): JComponent {
-        val group = DefaultActionGroup().apply {
-            add(AddContextAction())
-            add(BookmarkAction())
-        }
-
-        val toolbar = ActionManager.getInstance()
-            .createActionToolbar("CopilotCloneComposerToolbar", group, true)
-
-        toolbar.setTargetComponent(inputField)
-        toolbar.setMiniMode(true)
-
-        toolbar.component.apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyRight(8)
-        }
-
-        return toolbar.component
-    }
-
-    private inner class AddContextAction : DumbAwareAction("Add Context", "Add files to context", AllIcons.General.Add) {
-        override fun actionPerformed(e: AnActionEvent) {
-            onPickContextFiles()
-        }
-    }
-
-    private inner class BookmarkAction : DumbAwareAction("Saved prompts", "Open saved prompts", BookmarkIcons.BOOKMARK) {
-        override fun actionPerformed(e: AnActionEvent) {
-            PromptLibraryPopup.show(
-                project = project,
-                anchor = composerToolbar,
-                currentInput = { inputField.text },
-                onPick = { picked -> inputField.text = picked }
-            )
-        }
+        composerPanel.inputField.text = ""
     }
 
     private fun onPickContextFiles() {
         val manager = ContextManagerDialog(project) {
-            refreshContextChips()
+            contextChipsPanel.refresh()
 
             val files = userContextState.getSelectedContextFiles().map { it.path }
             append("Context files now (${files.size}):\n")
@@ -314,76 +190,10 @@ class AiToolWindowPanel(private val project: Project) {
         }.show()
     }
 
-    private fun refreshContextChips() {
-        contextChipsRow.removeAll()
-
-        val selected = userContextState.getSelectedContextFiles()
-        if (selected.isEmpty()) {
-            contextChipsRow.add(makeStateChip("No context"))
-        } else {
-            contextChipsRow.add(makeStateChip("Context"))
-            selected.take(8).forEach { cf ->
-                contextChipsRow.add(makeFileChip(cf))
-            }
-            if (selected.size > 8) {
-                contextChipsRow.add(makeStateChip("+${selected.size - 8} more"))
-            }
-        }
-
-        contextChipsRow.revalidate()
-        contextChipsRow.repaint()
-    }
-
-    private fun makeStateChip(text: String): JComponent {
-        return JBLabel(text, SwingConstants.CENTER).apply {
-            border = JBUI.Borders.compound(
-                JBUI.Borders.customLine(JBColor.border(), 1),
-                JBUI.Borders.empty(2, 8)
-            )
-            isOpaque = true
-            background = JBColor.namedColor("Editor.SearchField.background", JBColor.PanelBackground)
-        }
-    }
-
-    private fun makeFileChip(cf: com.markolukarami.copilotclone.domain.entities.context.ContextFile): JComponent {
-        val name = cf.path.substringAfterLast('/').substringAfterLast('\\')
-        val chip = BorderLayoutPanel().apply {
-            isOpaque = true
-            background = JBColor.namedColor("Editor.SearchField.background", JBColor.PanelBackground)
-            border = JBUI.Borders.compound(
-                JBUI.Borders.customLine(JBColor.border(), 1),
-                JBUI.Borders.empty(2, 8)
-            )
-        }
-
-        val label = JBLabel(name).apply {
-            toolTipText = cf.path
-        }
-
-        val close = JBLabel(AllIcons.Actions.Close).apply {
-            toolTipText = "Remove from context"
-            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            border = JBUI.Borders.emptyLeft(6)
-            addMouseListener(object : java.awt.event.MouseAdapter() {
-                override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                    userContextState.remove(cf.path)
-                    refreshContextChips()
-                    append("Removed from context: ${cf.path}\n\n")
-                }
-            })
-        }
-
-        chip.addToCenter(label)
-        chip.addToRight(close)
-        return chip
-    }
-
-    private fun onSend() {
-        val text = inputField.text.trim()
+    private fun onSend(text: String) {
         if (text.isBlank()) return
 
-        inputField.text = ""
-        sendButton.isEnabled = false
+        composerPanel.setSendButtonEnabled(false)
 
         append("You: $text\n\n")
         append("AI is thinking...\n\n")
@@ -407,14 +217,14 @@ class AiToolWindowPanel(private val project: Project) {
                         }.show()
                     }
 
-                    sendButton.isEnabled = true
+                    composerPanel.setSendButtonEnabled(true)
                 }
             }
 
             override fun onThrowable(error: Throwable) {
                 ApplicationManager.getApplication().invokeLater {
                     append("Error: ${error.message ?: "Unknown error"}\n\n")
-                    sendButton.isEnabled = true
+                    composerPanel.setSendButtonEnabled(true)
                 }
             }
         }.queue()
@@ -470,5 +280,4 @@ class AiToolWindowPanel(private val project: Project) {
             }
         }.queue()
     }
-
 }

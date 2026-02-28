@@ -18,6 +18,11 @@ Welcome to LLM Plugin 🚀
 
 First of all make sure your LM Studio server is running.
 
+Go to File > Settings > Tools > AI Plugin to configure:
+- Select your LLM Provider (LM Studio or Ollama)
+- Set the Base URL (default: LM Studio: http://127.0.0.1:1234, Ollama: http://127.0.0.1:11434)
+- Set your model name
+
 To apply changes to your code, you MUST start your prompt with:
 
 Apply this change: <your instruction>

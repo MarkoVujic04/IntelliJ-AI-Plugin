@@ -17,7 +17,8 @@ import com.markolukarami.copilotclone.domain.repositories.SettingsRepository
 class AiSettingsState : PersistentStateComponent<AiSettingsState>, SettingsRepository {
 
     var provider: String = LLMProvider.LM_STUDIO.name
-    var baseUrl: String = "http://127.0.0.1:1234"
+    var lmStudioBaseUrl: String = "http://127.0.0.1:1234"
+    var ollamaBaseUrl: String = "http://127.0.0.1:11434"
     var model: String = "mistralai/devstral-small-2-2512"
 
     override fun getState(): AiSettingsState = this
@@ -31,8 +32,15 @@ class AiSettingsState : PersistentStateComponent<AiSettingsState>, SettingsRepos
     fun getProvider(): LLMProvider = LLMProvider.fromString(provider)
     fun setProvider(value: LLMProvider) {provider = value.name}
 
+    fun getBaseUrlForCurrentProvider(): String {
+        return when (getProvider()) {
+            LLMProvider.LM_STUDIO -> lmStudioBaseUrl
+            LLMProvider.OLLAMA -> ollamaBaseUrl
+        }
+    }
+
     override fun getModelConfig(): ModelConfig {
-        val normalizedUrl = baseUrl.trim().removeSuffix("/")
+        val normalizedUrl = getBaseUrlForCurrentProvider().trim().removeSuffix("/")
         return ModelConfig(
             provider = getProvider(),
             baseUrl = normalizedUrl,

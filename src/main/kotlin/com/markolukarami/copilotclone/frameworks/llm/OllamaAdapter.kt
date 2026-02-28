@@ -31,15 +31,17 @@ class OllamaAdapter : ChatRepository {
     override fun chat(modelConfig: ModelConfig, messages: List<ChatMessage>): String {
         val url = modelConfig.baseUrl.removeSuffix("/") + "/api/chat"
 
-        val req = OpenAiChatRequest(
+        val req = OllamaChatRequest(
             model = modelConfig.model,
-            messages = messages.map { it.toOpenAi() },
-            temperature = modelConfig.temperature,
-            maxTokens = modelConfig.maxTokens,
-            stream = false
+            messages = messages.map { it.toOllama() },
+            stream = false,
+            options = OllamaOptions(
+                temperature = modelConfig.temperature,
+                num_predict = modelConfig.maxTokens
+            )
         )
 
-        val bodyStr = json.encodeToString(OpenAiChatRequest.serializer(), req)
+        val bodyStr = json.encodeToString(OllamaChatRequest.serializer(), req)
         val body = bodyStr.toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -56,11 +58,20 @@ class OllamaAdapter : ChatRepository {
                     return "Ollama request failed (HTTP ${resp.code}). Check Base URL/model."
                 }
 
-                val parsed = json.decodeFromString(OpenAiChatResponse.serializer(), text)
-                val content = parsed.choices.firstOrNull()?.message?.content?.trim()
-                    ?: parsed.message?.content?.trim()
+                val lines = text.lines().filter { it.isNotBlank() }
+                val contentBuilder = StringBuilder()
 
-                return content?.takeIf { it.isNotBlank() }
+                for (line in lines) {
+                    try {
+                        val parsed = json.decodeFromString(OllamaChatResponse.serializer(), line)
+                        parsed.message?.content?.let { contentBuilder.append(it) }
+                    } catch (e: Exception) {
+                        log.warn("Failed to parse Ollama response line: $line", e)
+                    }
+                }
+
+                val content = contentBuilder.toString().trim()
+                return content.takeIf { it.isNotBlank() }
                     ?: "Error: Empty response from Ollama."
             }
         } catch (e: IOException) {
@@ -72,7 +83,7 @@ class OllamaAdapter : ChatRepository {
         }
     }
 
-    private fun ChatMessage.toOpenAi(): OpenAiMessage {
+    private fun ChatMessage.toOllama(): OllamaMessage {
         val roleString = when (role) {
             ChatRole.SYSTEM -> "system"
             ChatRole.USER -> "user"
@@ -86,6 +97,6 @@ class OllamaAdapter : ChatRepository {
             else -> content
         }
 
-        return OpenAiMessage(role = roleString, content = contentString)
+        return OllamaMessage(role = roleString, content = contentString)
     }
 }

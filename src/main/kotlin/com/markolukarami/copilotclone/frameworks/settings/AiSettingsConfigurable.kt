@@ -17,30 +17,27 @@ class AiSettingsConfigurable : Configurable {
 
     private var panel: JPanel? = null
     private val providerCombo = JComboBox(LLMProvider.entries.toTypedArray())
-    private val baseUrlField = JBTextField()
+    private val lmStudioUrlField = JBTextField()
+    private val ollamaUrlField = JBTextField()
     private val modelField = JBTextField()
 
     override fun getDisplayName(): String = "AI Plugin"
 
     override fun createComponent(): JComponent {
         providerCombo.selectedItem = state.getProvider()
-        baseUrlField.text = state.baseUrl
+        lmStudioUrlField.text = state.lmStudioBaseUrl
+        ollamaUrlField.text = state.ollamaBaseUrl
         modelField.text = state.model
-
-        providerCombo.addActionListener {
-            val selected = providerCombo.selectedItem as? LLMProvider
-            if (selected != null && baseUrlField.text.isBlank()) {
-                baseUrlField.text = selected.defaultUrl
-            }
-        }
 
         val form = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = BorderFactory.createEmptyBorder(12, 12, 12, 12)
             add(JLabel("LLM Provider:"))
             add(providerCombo)
-            add(JLabel("Base URL (OpenAI compatible):"))
-            add(baseUrlField)
+            add(JLabel("LM Studio Base URL:"))
+            add(lmStudioUrlField)
+            add(JLabel("Ollama Base URL:"))
+            add(ollamaUrlField)
             add(JLabel("Model:"))
             add(modelField)
         }
@@ -54,7 +51,8 @@ class AiSettingsConfigurable : Configurable {
     override fun isModified(): Boolean {
         val selectedProvider = providerCombo.selectedItem as? LLMProvider
         return selectedProvider != state.getProvider() ||
-                baseUrlField.text.trim() != state.baseUrl.trim() ||
+                lmStudioUrlField.text.trim() != state.lmStudioBaseUrl.trim() ||
+                ollamaUrlField.text.trim() != state.ollamaBaseUrl.trim() ||
                 modelField.text.trim() != state.model.trim()
     }
 
@@ -63,13 +61,15 @@ class AiSettingsConfigurable : Configurable {
         if (selectedProvider != null) {
             state.setProvider(selectedProvider)
         }
-        state.baseUrl = baseUrlField.text.trim()
+        state.lmStudioBaseUrl = lmStudioUrlField.text.trim()
+        state.ollamaBaseUrl = ollamaUrlField.text.trim()
         state.model = modelField.text.trim()
     }
 
     override fun reset() {
         providerCombo.selectedItem = state.getProvider()
-        baseUrlField.text = state.baseUrl
+        lmStudioUrlField.text = state.lmStudioBaseUrl
+        ollamaUrlField.text = state.ollamaBaseUrl
         modelField.text = state.model
     }
 

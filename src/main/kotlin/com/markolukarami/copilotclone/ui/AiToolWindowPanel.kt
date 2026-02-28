@@ -11,12 +11,14 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
+import com.markolukarami.copilotclone.domain.repositories.ModelRegistryRepository
 import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJPatchApplier
 import com.markolukarami.copilotclone.frameworks.editor.PatchEnricher
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
 import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
+import com.markolukarami.copilotclone.frameworks.llm.ModelRegistryFactory
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
 import com.markolukarami.copilotclone.ui.components.ComposerPanel
 import com.markolukarami.copilotclone.ui.components.ContextChipsPanel
@@ -30,10 +32,9 @@ import javax.swing.JTabbedPane
 
 class AiToolWindowPanel(private val project: Project) {
 
-    private val controller = ChatWiring.chatController(project)
+    private var controller = ChatWiring.chatController(project)
     private val userContextState = project.service<UserContextState>()
     private val settingsState = service<AiSettingsState>()
-    private val modelRegistry = LMStudioModelRegistryAdapter()
     private val chatSessions = project.service<ChatSessionState>()
 
     private val outputArea = JBTextArea().apply {
@@ -119,6 +120,10 @@ class AiToolWindowPanel(private val project: Project) {
                 append("Context files now (${files.size}):\n")
                 files.forEach { append("- $it\n") }
                 append("\n")
+            },
+            onProviderChanged = {
+                controller = ChatWiring.chatController(project)
+                append("LLM Provider changed to: ${settingsState.getProvider().displayName}\n\n")
             }
         )
 
@@ -230,6 +235,10 @@ class AiToolWindowPanel(private val project: Project) {
         }.queue()
     }
 
+    private fun getModelRegistry(): ModelRegistryRepository {
+        return ModelRegistryFactory.create(settingsState.getProvider())
+    }
+
     private fun append(text: String) {
         outputArea.append(text)
         outputArea.caretPosition = outputArea.document.length
@@ -241,11 +250,13 @@ class AiToolWindowPanel(private val project: Project) {
                 indicator.text = "Fetching models..."
 
                 val config = settingsState.getModelConfig()
+                val modelRegistry = getModelRegistry()
                 val models = try {
                     modelRegistry.listModels(config)
                 } catch (t: Throwable) {
                     ApplicationManager.getApplication().invokeLater {
                         append("Error fetching models: ${t.message}\n")
+                        append("Provider: ${config.provider.displayName}\n")
                         append("Base URL: ${config.baseUrl}\n\n")
                     }
                     return
@@ -254,7 +265,14 @@ class AiToolWindowPanel(private val project: Project) {
                 ApplicationManager.getApplication().invokeLater {
                     if (models.isEmpty()) {
                         append("No models returned.\n")
-                        append("LM Studio URL: ${config.baseUrl.trimEnd('/')}/v1/models\n\n")
+                        append("Provider: ${config.provider.displayName}\n")
+                        val endpoint = when (config.provider) {
+                            com.markolukarami.copilotclone.domain.entities.LLMProvider.LM_STUDIO ->
+                                "${config.baseUrl.trimEnd('/')}/v1/models"
+                            com.markolukarami.copilotclone.domain.entities.LLMProvider.OLLAMA ->
+                                "${config.baseUrl.trimEnd('/')}/api/tags"
+                        }
+                        append("URL: $endpoint\n\n")
                         return@invokeLater
                     }
 
@@ -275,6 +293,7 @@ class AiToolWindowPanel(private val project: Project) {
                 val config = settingsState.getModelConfig()
                 ApplicationManager.getApplication().invokeLater {
                     append("Error fetching models: ${error.message ?: "Unknown error"}\n")
+                    append("Provider: ${config.provider.displayName}\n")
                     append("Base URL: ${config.baseUrl}\n\n")
                 }
             }

@@ -25,7 +25,8 @@ object ChatWiring {
     fun chatController(project: Project): ChatController {
         val settingsRepo = service<AiSettingsState>()
         val userContextRepo = project.service<UserContextState>()
-        val chatRepo = LMStudioAdapter()
+        val provider = settingsRepo.getProvider()
+        val chatRepo = ChatRepositoryFactory.create(provider)
         val editorRepo = IntelliJEditorContextProvider(project)
         val textSearchRepo = IntelliJTextSearchAdapter(project)
         val fileReaderRepo = IntelliJFileReaderAdapter()

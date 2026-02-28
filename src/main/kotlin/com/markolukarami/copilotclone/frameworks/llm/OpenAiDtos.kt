@@ -19,7 +19,8 @@ data class OpenAiMessage(
 
 @Serializable
 data class OpenAiChatResponse(
-    val choices: List<Choice> = emptyList()
+    val choices: List<Choice> = emptyList(),
+    val message: Message? = null
 ) {
     @Serializable
     data class Choice(val message: Message? = null)

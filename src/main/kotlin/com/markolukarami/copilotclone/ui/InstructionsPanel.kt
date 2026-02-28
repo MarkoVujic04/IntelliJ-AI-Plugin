@@ -14,7 +14,9 @@ class InstructionsPanel : JPanel(BorderLayout()) {
         textArea.wrapStyleWord = true
 
         textArea.text = """
-Welcome to Copilot Clone 🚀
+Welcome to LLM Plugin 🚀
+
+First of all make sure your LM Studio server is running.
 
 To apply changes to your code, you MUST start your prompt with:
 

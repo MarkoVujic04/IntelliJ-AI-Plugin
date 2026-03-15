@@ -19,7 +19,8 @@ class AiSettingsState : PersistentStateComponent<AiSettingsState>, SettingsRepos
     var provider: String = LLMProvider.LM_STUDIO.name
     var lmStudioBaseUrl: String = "http://127.0.0.1:1234"
     var ollamaBaseUrl: String = "http://127.0.0.1:11434"
-    var model: String = "mistralai/devstral-small-2-2512"
+    var model: String = ""
+    var maxResponseTokens: Int = 0
 
     override fun getState(): AiSettingsState = this
     override fun loadState(state: AiSettingsState) {
@@ -44,7 +45,8 @@ class AiSettingsState : PersistentStateComponent<AiSettingsState>, SettingsRepos
         return ModelConfig(
             provider = getProvider(),
             baseUrl = normalizedUrl,
-            model = model.trim()
+            model = model.trim(),
+            maxResponseTokens = maxResponseTokens
         )
     }
 }

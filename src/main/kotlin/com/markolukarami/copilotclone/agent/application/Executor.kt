@@ -50,7 +50,6 @@ class Executor(
         fileAnalyses: List<FileAnalysisEntry>
     ): String {
         val agents = agentsMdService.getInstructionsOrNull()
-        val base = projectBasePath.replace('\\', '/').trimEnd('/') + "/"
 
         val methodName = guessMethodName(userText)
 
@@ -226,13 +225,23 @@ ${fileBlocks.joinToString("\n")}
                 ChatMessage(ChatRole.USER, patchPrompt)
             )
 
-            val baseTokens = 900
-            val perFileTokens = 400
-            val scaledTokens = baseTokens + (fileAnalyses.size * perFileTokens)
+            // Auto-scale maxTokens based on model context window + prompt size, or use user override
+            val computedMaxTokens = ModelTokenEstimator.compute(
+                userOverride = config.maxResponseTokens,
+                modelName = config.model,
+                promptText = patchPrompt,
+                fileCount = fileAnalyses.size
+            )
+
+            trace += TraceStep(
+                "Token budget",
+                "maxTokens=$computedMaxTokens (override=${config.maxResponseTokens}, model=${config.model})",
+                TraceType.INFO
+            )
 
             val patchConfig = config.copy(
                 temperature = 0.0,
-                maxTokens = scaledTokens
+                maxTokens = computedMaxTokens
             )
 
             val mergedAnalysis = mergeAnalyses(fileAnalyses)
@@ -415,7 +424,14 @@ $originalPrompt
             ChatMessage(ChatRole.USER, fixPrompt)
         )
 
-        val fixConfig = config.copy(temperature = 0.0, maxTokens = 900)
+        val fixConfig = config.copy(
+            temperature = 0.0,
+            maxTokens = ModelTokenEstimator.compute(
+                userOverride = config.maxResponseTokens,
+                modelName = config.model,
+                promptText = fixPrompt
+            )
+        )
         val fixRaw = chatRepository.chat(fixConfig, fixMessages)
         val fixPatch = PatchParser.parseOrNull(fixRaw)
 

@@ -20,6 +20,7 @@ class AiSettingsConfigurable : Configurable {
     private val lmStudioUrlField = JBTextField()
     private val ollamaUrlField = JBTextField()
     private val modelField = JBTextField()
+    private val maxResponseTokensField = JBTextField()
 
     override fun getDisplayName(): String = "AI Plugin"
 
@@ -28,6 +29,7 @@ class AiSettingsConfigurable : Configurable {
         lmStudioUrlField.text = state.lmStudioBaseUrl
         ollamaUrlField.text = state.ollamaBaseUrl
         modelField.text = state.model
+        maxResponseTokensField.text = state.maxResponseTokens.toString()
 
         val form = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -40,6 +42,8 @@ class AiSettingsConfigurable : Configurable {
             add(ollamaUrlField)
             add(JLabel("Model:"))
             add(modelField)
+            add(JLabel("Max Response Tokens (0 = auto):"))
+            add(maxResponseTokensField)
         }
 
         return JPanel(BorderLayout()).apply {
@@ -50,10 +54,12 @@ class AiSettingsConfigurable : Configurable {
 
     override fun isModified(): Boolean {
         val selectedProvider = providerCombo.selectedItem as? LLMProvider
+        val tokensModified = (maxResponseTokensField.text.trim().toIntOrNull() ?: 0) != state.maxResponseTokens
         return selectedProvider != state.getProvider() ||
                 lmStudioUrlField.text.trim() != state.lmStudioBaseUrl.trim() ||
                 ollamaUrlField.text.trim() != state.ollamaBaseUrl.trim() ||
-                modelField.text.trim() != state.model.trim()
+                modelField.text.trim() != state.model.trim() ||
+                tokensModified
     }
 
     override fun apply() {
@@ -64,6 +70,7 @@ class AiSettingsConfigurable : Configurable {
         state.lmStudioBaseUrl = lmStudioUrlField.text.trim()
         state.ollamaBaseUrl = ollamaUrlField.text.trim()
         state.model = modelField.text.trim()
+        state.maxResponseTokens = (maxResponseTokensField.text.trim().toIntOrNull() ?: 0).coerceAtLeast(0)
     }
 
     override fun reset() {
@@ -71,6 +78,7 @@ class AiSettingsConfigurable : Configurable {
         lmStudioUrlField.text = state.lmStudioBaseUrl
         ollamaUrlField.text = state.ollamaBaseUrl
         modelField.text = state.model
+        maxResponseTokensField.text = state.maxResponseTokens.toString()
     }
 
     override fun disposeUIResources() {

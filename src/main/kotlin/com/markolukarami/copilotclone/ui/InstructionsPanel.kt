@@ -23,17 +23,14 @@ Go to File > Settings > Tools > AI Plugin to configure:
 - Set the Base URL (default: LM Studio: http://127.0.0.1:1234, Ollama: http://127.0.0.1:11434)
 - Set your model name or choose it directly in the bottom UI
 
-To apply changes to your code, you MUST start your prompt with:
+To apply changes to your code, you MUST start your prompt with one of the following keywords:
 
 Apply this change: <your instruction>
 
 Examples:
-
-Apply this change: Rename method reset to initialize.
-
-Apply this change: Add return true; at the end of isGameComplete method.
-
-Apply this change: Write a method called exampleMethod that does this
+add|remove|delete|insert|create|update|move|edit|change|modify|apply|rename
+      
+Apply this change: generate a method "exampleMethod"
 
 Important Rules:
 

@@ -26,14 +26,17 @@ class Executor(
 
     private fun isPatchRequest(userText: String): Boolean {
         val t = userText.lowercase()
-        return t.startsWith("apply") ||
-                t.contains("apply this") ||
-                t.contains("make this change") ||
-                t.contains("rename") ||
-                t.contains("refactor") ||
-                t.contains("edit the code") ||
-                t.contains("change the code")
+        val patchPatterns = listOf(
+            Regex("""(add|remove|delete|insert|create|update|move)\s+(a\s+)?(method|field|class|function|import|line|statement)"""),
+            Regex("""(rename|refactor|extract|inline)\s+"""),
+            Regex("""(apply|make)\s+(this\s+)?(change|edit|fix|patch)"""),
+            Regex("""(edit|change|modify|fix)\s+(the\s+)?(code|method|class|file)"""),
+            Regex("""add\s+.*\s+to\s+"""),
+            Regex("""remove\s+.*\s+from\s+"""),
+        )
+        return patchPatterns.any { it.containsMatchIn(t) }
     }
+
 
     private fun buildPatchPrompt(
         userText: String,

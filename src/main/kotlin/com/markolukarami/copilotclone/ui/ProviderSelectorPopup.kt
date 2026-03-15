@@ -1,9 +1,6 @@
 package com.markolukarami.copilotclone.ui
 
-import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.ui.awt.RelativePoint
 import com.markolukarami.copilotclone.domain.entities.LLMProvider
-import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.JMenuItem
 import javax.swing.JPopupMenu
@@ -29,9 +26,6 @@ object ProviderSelectorPopup {
             popupMenu.add(item)
         }
 
-        val point = RelativePoint(anchor, Point(0, anchor.height))
         popupMenu.show(anchor, 0, anchor.height)
     }
 }
-
-

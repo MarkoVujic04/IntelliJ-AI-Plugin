@@ -52,7 +52,30 @@ class ComposerPanel(
         addActionListener { handleSend() }
     }
 
+    private var onCancel: (() -> Unit)? = null
+    private var isInSendMode = true
+
     val component: JComponent = buildComposer()
+
+    fun setToCancelMode(onCancelCallback: () -> Unit) {
+        isInSendMode = false
+        onCancel = onCancelCallback
+        sendButton.icon = AllIcons.Actions.Suspend
+        sendButton.toolTipText = "Cancel"
+        sendButton.actionListeners.forEach { sendButton.removeActionListener(it) }
+        sendButton.addActionListener {
+            onCancel?.invoke()
+        }
+    }
+
+    fun setToSendMode() {
+        isInSendMode = true
+        onCancel = null
+        sendButton.icon = AllIcons.Actions.Execute
+        sendButton.toolTipText = "Send"
+        sendButton.actionListeners.forEach { sendButton.removeActionListener(it) }
+        sendButton.addActionListener { handleSend() }
+    }
 
     fun getSendButton(): JButton = sendButton
 

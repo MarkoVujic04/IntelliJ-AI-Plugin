@@ -12,6 +12,7 @@ import com.markolukarami.copilotclone.agent.application.Strategist
 import com.markolukarami.copilotclone.application.usecase.AgentChatUseCase
 import com.markolukarami.copilotclone.application.usecase.AgentPipelineUseCase
 import com.markolukarami.copilotclone.frameworks.chat.ChatSessionState
+import com.markolukarami.copilotclone.frameworks.editor.CodeInspector
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJEditorContextProvider
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJFileReaderAdapter
 import com.markolukarami.copilotclone.frameworks.editor.IntelliJTextSearchAdapter
@@ -44,11 +45,13 @@ object ChatWiring {
             maxFileChars = 1500,
             maxFiles = 5
         )
+        val codeInspector = CodeInspector(project)
         val executor = Executor(
             chatRepository = chatRepo,
             editorContextRepository = editorRepo,
             project = project,
             agentsMdService = agentsMdService,
+            codeInspector = codeInspector,
         )
 
         val pipeline = AgentPipelineUseCase(

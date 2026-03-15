@@ -3,6 +3,7 @@ package com.markolukarami.copilotclone.ui
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -17,7 +18,6 @@ import com.markolukarami.copilotclone.frameworks.editor.IntelliJPatchApplier
 import com.markolukarami.copilotclone.frameworks.editor.PatchEnricher
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.frameworks.llm.ChatWiring
-import com.markolukarami.copilotclone.frameworks.llm.LMStudioModelRegistryAdapter
 import com.markolukarami.copilotclone.frameworks.llm.ModelRegistryFactory
 import com.markolukarami.copilotclone.frameworks.settings.AiSettingsState
 import com.markolukarami.copilotclone.ui.components.ComposerPanel
@@ -29,6 +29,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
+import kotlin.apply
 
 class AiToolWindowPanel(private val project: Project) {
 
@@ -55,7 +56,7 @@ class AiToolWindowPanel(private val project: Project) {
 
     private lateinit var composerPanel: ComposerPanel
     private lateinit var inlineActionsBar: InlineActionsBar
-
+    private var currentIndicator: ProgressIndicator? = null
     val component: JComponent = buildMainUI()
 
     private fun buildMainUI(): JComponent {
@@ -198,42 +199,74 @@ class AiToolWindowPanel(private val project: Project) {
     private fun onSend(text: String) {
         if (text.isBlank()) return
 
-        composerPanel.setSendButtonEnabled(false)
-
         append("You: $text\n\n")
         append("AI is thinking...\n\n")
 
-        object : Task.Backgroundable(project, "AI Chat", false) {
+        val task = object : Task.Backgroundable(project, "AI Chat", true) {
             override fun run(indicator: ProgressIndicator) {
+                currentIndicator = indicator
                 indicator.text = "Contacting LLM..."
+
+                if (indicator.isCanceled) {
+                    return
+                }
+
                 val result = controller.onUserMessage(text)
+
+                if (indicator.isCanceled) {
+                    return
+                }
+
                 append("DEBUG patch present: ${result.patch != null}\n")
 
                 ApplicationManager.getApplication().invokeLater {
-                    result.chatItems.drop(1).forEach { vm -> append(vm.displayText + "\n\n") }
-                    tracePanel.setTraceLines(result.trace.lines)
+                    if (!indicator.isCanceled) {
+                        result.chatItems.drop(1).forEach { vm -> append(vm.displayText + "\n\n") }
+                        tracePanel.setTraceLines(result.trace.lines)
 
-                    val patch = result.patch
-                    if (patch != null) {
-                        val enrichedPatch = PatchEnricher(project).enrichPatch(patch)
-                        PatchPreviewDialog(project, enrichedPatch) {
-                            project.service<IntelliJPatchApplier>().apply(patch)
-                            append("Patch applied (undo with Ctrl+Z)\n\n")
-                        }.show()
+                        val patch = result.patch
+                        if (patch != null) {
+                            val enrichedPatch = PatchEnricher(project).enrichPatch(patch)
+                            PatchPreviewDialog(project, enrichedPatch) {
+                                project.service<IntelliJPatchApplier>().apply(patch)
+                                append("Patch applied (undo with Ctrl+Z)\n\n")
+                            }.show()
+                        }
                     }
 
-                    composerPanel.setSendButtonEnabled(true)
+                    resetToSendMode()
                 }
             }
 
             override fun onThrowable(error: Throwable) {
                 ApplicationManager.getApplication().invokeLater {
                     append("Error: ${error.message ?: "Unknown error"}\n\n")
-                    composerPanel.setSendButtonEnabled(true)
+                    resetToSendMode()
                 }
             }
-        }.queue()
+
+            override fun onCancel() {
+                ApplicationManager.getApplication().invokeLater {
+                    append("Request cancelled by user.\n\n")
+                    resetToSendMode()
+                }
+            }
+        }
+
+        composerPanel.setToCancelMode {
+            currentIndicator?.cancel()
+            append("Cancelling request...\n")
+        }
+
+        ProgressManager.getInstance().run(task)
     }
+
+    private fun resetToSendMode() {
+        composerPanel.setToSendMode()
+        composerPanel.setSendButtonEnabled(true)
+        currentIndicator = null
+    }
+
 
     private fun getModelRegistry(): ModelRegistryRepository {
         return ModelRegistryFactory.create(settingsState.getProvider())

@@ -6,10 +6,14 @@ import com.markolukarami.copilotclone.domain.entities.ChatMessage
 import com.markolukarami.copilotclone.domain.entities.ChatResult
 import com.markolukarami.copilotclone.domain.entities.ChatRole
 import com.markolukarami.copilotclone.domain.entities.ModelConfig
+import com.markolukarami.copilotclone.domain.entities.code.CodeAnalysis
+import com.markolukarami.copilotclone.domain.entities.code.ConsistencyIssue
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.ChatRepository
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
+import com.markolukarami.copilotclone.frameworks.editor.CodeInspector
+import com.markolukarami.copilotclone.frameworks.editor.ConsistencyChecker
 import com.markolukarami.copilotclone.frameworks.instructions.AgentsMdService
 
 class Executor(
@@ -17,6 +21,7 @@ class Executor(
     private val editorContextRepository: EditorContextRepository,
     private val project: Project,
     private val agentsMdService: AgentsMdService,
+    private val codeInspector: CodeInspector,
 ) {
 
     private fun isPatchRequest(userText: String): Boolean {
@@ -33,7 +38,8 @@ class Executor(
     private fun buildPatchPrompt(
         userText: String,
         evidence: Strategist.SelectedEvidence,
-        projectBasePath: String
+        projectBasePath: String,
+        analysis: CodeAnalysis
     ): String {
         val file = evidence.files.firstOrNull()
         val abs = (file?.filePath ?: "").replace('\\', '/')
@@ -48,6 +54,40 @@ class Executor(
         val contextBlock = when {
             extractedMethod != null -> "METHOD SOURCE (exact):\n$extractedMethod"
             else -> "FILE CONTENT (exact):\n$content"
+        }
+
+        val analysisBlock = analysis.formatForPrompt()
+
+        val targetMethodAnalysis = if (methodName != null) {
+            val sig = analysis.methods.find { it.name == methodName }
+            if (sig != null) {
+                val params = sig.parameters.joinToString(", ") { "${it.type} ${it.name}" }
+                """
+TARGET METHOD ANALYSIS:
+  Method: ${sig.name}
+  Returns: ${sig.returnType}
+  Parameters: $params
+  The generated code MUST return a value of type '${sig.returnType}' (unless void/Unit).
+  The generated code MUST accept exactly these parameter types.
+"""
+            } else {
+                ""
+            }
+        } else {
+            ""
+        }
+
+        val similarBlock = if (analysis.similarMethods.isNotEmpty()) {
+            val lines = analysis.similarMethods.joinToString("\n") { m ->
+                val p = m.parameters.joinToString(", ") { "${it.type} ${it.name}" }
+                "  ${m.returnType} ${m.name}($p) [${m.filePath ?: "unknown"}]"
+            }
+            """
+SIMILAR METHODS ALREADY IN CODEBASE (reuse patterns, do not duplicate):
+$lines
+"""
+        } else {
+            ""
         }
 
         return """
@@ -114,6 +154,9 @@ Rules for CREATE_METHOD:
 If the request is about adding a statement "after X" or "at the end":
 - still use REWRITE_METHOD and place it correctly inside the method.
 
+$analysisBlock
+$targetMethodAnalysis
+$similarBlock
 USER REQUEST:
 $userText
 
@@ -137,7 +180,24 @@ $contextBlock
             trace += TraceStep("Agent: Executor", "Patch-mode JSON call", TraceType.MODEL)
 
             val basePath = project.basePath ?: ""
-            val patchPrompt = buildPatchPrompt(userText, evidence, basePath)
+
+            val targetFilePath = evidence.files.firstOrNull()?.filePath ?: ""
+            trace += TraceStep("Pre-gen analysis", "Inspecting $targetFilePath", TraceType.TOOL)
+
+            val analysis = if (targetFilePath.isNotBlank()) {
+                codeInspector.analyze(targetFilePath)
+            } else {
+                CodeAnalysis(targetFilePath = "")
+            }
+
+            trace += TraceStep(
+                "Analysis complete",
+                "methods=${analysis.methods.size}, fields=${analysis.fields.size}, " +
+                        "imports=${analysis.imports.size}, similar=${analysis.similarMethods.size}",
+                TraceType.INFO
+            )
+
+            val patchPrompt = buildPatchPrompt(userText, evidence, basePath, analysis)
 
             val patchMessages = listOf(
                 ChatMessage(ChatRole.USER, patchPrompt)
@@ -152,9 +212,18 @@ $contextBlock
             val patch1 = PatchParser.parseOrNull(raw1)
 
             if (patch1 != null && patch1.files.isNotEmpty()) {
+                val issues = ConsistencyChecker.check(analysis, raw1)
+                appendConsistencyTrace(issues, trace)
+
+                if (issues.any { it.kind == com.markolukarami.copilotclone.domain.entities.code.IssueKind.RETURN_MISMATCH }) {
+                    trace += TraceStep("Consistency fix", "Re-prompting for return type mismatch", TraceType.MODEL)
+                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, analysis, trace)
+                    if (fixResult != null) return fixResult
+                }
+
                 trace += TraceStep("Patch proposed", "files=${patch1.files.size}", TraceType.INFO)
                 return ChatResult(
-                    assistantText = "I prepared an edit patch:\n- ${patch1.summary}\nPress Apply to update your code.",
+                    assistantText = buildPatchResponse(patch1.summary, issues),
                     trace = trace,
                     patch = patch1
                 )
@@ -173,9 +242,18 @@ $contextBlock
             val patch2 = PatchParser.parseOrNull(raw2)
 
             if (patch2 != null && patch2.files.isNotEmpty()) {
+                val issues = ConsistencyChecker.check(analysis, raw2)
+                appendConsistencyTrace(issues, trace)
+
+                if (issues.any { it.kind == com.markolukarami.copilotclone.domain.entities.code.IssueKind.RETURN_MISMATCH }) {
+                    trace += TraceStep("Consistency fix", "Re-prompting for return type mismatch", TraceType.MODEL)
+                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, analysis, trace)
+                    if (fixResult != null) return fixResult
+                }
+
                 trace += TraceStep("Patch proposed", "files=${patch2.files.size}", TraceType.INFO)
                 return ChatResult(
-                    assistantText = "I prepared an edit patch:\n- ${patch2.summary}\nPress Apply to update your code.",
+                    assistantText = buildPatchResponse(patch2.summary, issues),
                     trace = trace,
                     patch = patch2
                 )
@@ -258,6 +336,68 @@ $contextBlock
             }
         }
         return null
+    }
+
+    private fun appendConsistencyTrace(issues: List<ConsistencyIssue>, trace: MutableList<TraceStep>) {
+        if (issues.isEmpty()) {
+            trace += TraceStep("Consistency check", "No issues found", TraceType.INFO)
+        } else {
+            val summary = issues.joinToString("; ") { "[${it.kind}] ${it.description}" }
+            trace += TraceStep(
+                "Consistency check",
+                "${issues.size} issue(s): $summary",
+                TraceType.ERROR
+            )
+        }
+    }
+
+    private fun attemptConsistencyFix(
+        config: ModelConfig,
+        originalPrompt: String,
+        issues: List<ConsistencyIssue>,
+        analysis: CodeAnalysis,
+        trace: MutableList<TraceStep>
+    ): ChatResult? {
+        val issueDescriptions = issues.joinToString("\n") { "- [${it.kind}] ${it.description}" }
+
+        val fixPrompt = """
+The previous response had consistency issues:
+$issueDescriptions
+
+Fix these issues. Use the correct return type and parameter types as specified.
+
+$originalPrompt
+""".trimIndent()
+
+        val fixMessages = listOf(
+            ChatMessage(ChatRole.USER, fixPrompt)
+        )
+
+        val fixConfig = config.copy(temperature = 0.0, maxTokens = 900)
+        val fixRaw = chatRepository.chat(fixConfig, fixMessages)
+        val fixPatch = PatchParser.parseOrNull(fixRaw)
+
+        if (fixPatch != null && fixPatch.files.isNotEmpty()) {
+            val fixIssues = ConsistencyChecker.check(analysis, fixRaw)
+            appendConsistencyTrace(fixIssues, trace)
+            trace += TraceStep("Consistency fix", "Fix succeeded", TraceType.INFO)
+            return ChatResult(
+                assistantText = buildPatchResponse(fixPatch.summary, fixIssues),
+                trace = trace,
+                patch = fixPatch
+            )
+        }
+
+        trace += TraceStep("Consistency fix", "Fix attempt failed, using original", TraceType.ERROR)
+        return null
+    }
+
+    private fun buildPatchResponse(summary: String, issues: List<ConsistencyIssue>): String {
+        val base = "I prepared an edit patch:\n- $summary\nPress Apply to update your code."
+        if (issues.isEmpty()) return base
+
+        val warnings = issues.joinToString("\n") { "⚠ [${it.kind.name}] ${it.description}" }
+        return "$base\n\nConsistency warnings:\n$warnings"
     }
 
 }

@@ -178,6 +178,19 @@ ${fileBlocks.joinToString("\n")}
         trace: MutableList<TraceStep>
     ): ChatResult {
 
+        if (config.model.isBlank()) {
+            trace += TraceStep(
+                "Executor",
+                "No model configured. Please set a model in Settings > Tools > AI Plugin or in bottom UI.",
+                TraceType.ERROR
+            )
+            return ChatResult(
+                assistantText = "⚠ No model configured. Please go to **Settings > Tools > AI Plugin** and set a model.",
+                trace = trace,
+                patch = null
+            )
+        }
+
         val patchMode = isPatchRequest(userText)
 
         if (patchMode) {

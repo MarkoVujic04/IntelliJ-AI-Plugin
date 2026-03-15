@@ -38,34 +38,37 @@ class Executor(
     }
 
 
+    private data class FileAnalysisEntry(
+        val relativePath: String,
+        val content: String,
+        val analysis: CodeAnalysis
+    )
+
     private fun buildPatchPrompt(
         userText: String,
-        evidence: Strategist.SelectedEvidence,
         projectBasePath: String,
-        analysis: CodeAnalysis
+        fileAnalyses: List<FileAnalysisEntry>
     ): String {
-        val file = evidence.files.firstOrNull()
-        val abs = (file?.filePath ?: "").replace('\\', '/')
-        val base = projectBasePath.replace('\\', '/').trimEnd('/') + "/"
-        val rel = abs.removePrefix(base)
-        val content = file?.content ?: ""
         val agents = agentsMdService.getInstructionsOrNull()
+        val base = projectBasePath.replace('\\', '/').trimEnd('/') + "/"
 
         val methodName = guessMethodName(userText)
-        val extractedMethod = if (methodName != null) extractJavaMethodBlock(content, methodName) else null
 
-        val contextBlock = when {
-            extractedMethod != null -> "METHOD SOURCE (exact):\n$extractedMethod"
-            else -> "FILE CONTENT (exact):\n$content"
-        }
+        val fileBlocks = fileAnalyses.mapIndexed { idx, entry ->
+            val extractedMethod = if (methodName != null) extractJavaMethodBlock(entry.content, methodName) else null
 
-        val analysisBlock = analysis.formatForPrompt()
+            val contextBlock = when {
+                extractedMethod != null -> "METHOD SOURCE (exact):\n$extractedMethod"
+                else -> "FILE CONTENT (exact):\n${entry.content}"
+            }
 
-        val targetMethodAnalysis = if (methodName != null) {
-            val sig = analysis.methods.find { it.name == methodName }
-            if (sig != null) {
-                val params = sig.parameters.joinToString(", ") { "${it.type} ${it.name}" }
-                """
+            val analysisBlock = entry.analysis.formatForPrompt()
+
+            val targetMethodAnalysis = if (methodName != null) {
+                val sig = entry.analysis.methods.find { it.name == methodName }
+                if (sig != null) {
+                    val params = sig.parameters.joinToString(", ") { "${it.type} ${it.name}" }
+                    """
 TARGET METHOD ANALYSIS:
   Method: ${sig.name}
   Returns: ${sig.returnType}
@@ -73,15 +76,20 @@ TARGET METHOD ANALYSIS:
   The generated code MUST return a value of type '${sig.returnType}' (unless void/Unit).
   The generated code MUST accept exactly these parameter types.
 """
-            } else {
-                ""
-            }
-        } else {
-            ""
+                } else ""
+            } else ""
+
+            """
+--- FILE ${idx + 1}: ${entry.relativePath} ---
+$analysisBlock
+$targetMethodAnalysis
+$contextBlock
+"""
         }
 
-        val similarBlock = if (analysis.similarMethods.isNotEmpty()) {
-            val lines = analysis.similarMethods.joinToString("\n") { m ->
+        val allSimilar = fileAnalyses.flatMap { it.analysis.similarMethods }.distinctBy { it.name }
+        val similarBlock = if (allSimilar.isNotEmpty()) {
+            val lines = allSimilar.joinToString("\n") { m ->
                 val p = m.parameters.joinToString(", ") { "${it.type} ${it.name}" }
                 "  ${m.returnType} ${m.name}($p) [${m.filePath ?: "unknown"}]"
             }
@@ -89,8 +97,14 @@ TARGET METHOD ANALYSIS:
 SIMILAR METHODS ALREADY IN CODEBASE (reuse patterns, do not duplicate):
 $lines
 """
-        } else {
-            ""
+        } else ""
+
+        val filesSchemaExample = fileAnalyses.joinToString(",\n    ") { entry ->
+            """{ "relativePath": "${entry.relativePath}", "operations": [ { "type": "REWRITE_METHOD", "methodName": "...", "newSource": "..." } ] }"""
+        }
+
+        val relPathRules = fileAnalyses.joinToString("\n") { entry ->
+            "- \"${entry.relativePath}\""
         }
 
         return """
@@ -101,21 +115,14 @@ Return this schema EXACTLY:
 {
   "summary": "short description",
   "files": [
-    {
-      "relativePath": "$rel",
-      "operations": [
-        {
-          "type": "REWRITE_METHOD",
-          "methodName": "methodNameHere",
-          "newSource": "full updated method source here"
-        }
-      ]
-    }
+    $filesSchemaExample
   ]
 }
 
 Rules:
-- Use EXACTLY this relativePath: "$rel"
+- Use ONLY these relativePaths:
+$relPathRules
+- You may include operations for one or more files. Only include files that need changes.
 - operations must be an array (use [] if you cannot safely do it).
 - Do NOT include unrelated formatting changes.
 - Prefer REWRITE_METHOD for ANY method content changes:
@@ -157,16 +164,11 @@ Rules for CREATE_METHOD:
 If the request is about adding a statement "after X" or "at the end":
 - still use REWRITE_METHOD and place it correctly inside the method.
 
-$analysisBlock
-$targetMethodAnalysis
 $similarBlock
 USER REQUEST:
 $userText
 
-FILE PATH (relative):
-$rel
-
-$contextBlock
+${fileBlocks.joinToString("\n")}
 """.trimIndent()
     }
 
@@ -183,44 +185,68 @@ $contextBlock
             trace += TraceStep("Agent: Executor", "Patch-mode JSON call", TraceType.MODEL)
 
             val basePath = project.basePath ?: ""
+            val baseNorm = basePath.replace('\\', '/').trimEnd('/') + "/"
 
-            val targetFilePath = evidence.files.firstOrNull()?.filePath ?: ""
-            trace += TraceStep("Pre-gen analysis", "Inspecting $targetFilePath", TraceType.TOOL)
+            val fileAnalyses = evidence.files.mapNotNull { file ->
+                val absPath = file.filePath.replace('\\', '/').trim()
+                if (absPath.isBlank()) return@mapNotNull null
+                val rel = absPath.removePrefix(baseNorm)
 
-            val analysis = if (targetFilePath.isNotBlank()) {
-                codeInspector.analyze(targetFilePath)
-            } else {
-                CodeAnalysis(targetFilePath = "")
+                trace += TraceStep("Pre-gen analysis", "Inspecting $rel", TraceType.TOOL)
+
+                val analysis = codeInspector.analyze(absPath)
+
+                trace += TraceStep(
+                    "Analysis: $rel",
+                    "methods=${analysis.methods.size}, fields=${analysis.fields.size}, " +
+                            "imports=${analysis.imports.size}",
+                    TraceType.INFO
+                )
+
+                FileAnalysisEntry(
+                    relativePath = rel,
+                    content = file.content,
+                    analysis = analysis
+                )
+            }
+
+            if (fileAnalyses.isEmpty()) {
+                trace += TraceStep("Pre-gen analysis", "No files available for analysis", TraceType.ERROR)
             }
 
             trace += TraceStep(
-                "Analysis complete",
-                "methods=${analysis.methods.size}, fields=${analysis.fields.size}, " +
-                        "imports=${analysis.imports.size}, similar=${analysis.similarMethods.size}",
+                "Multi-file analysis",
+                "Analyzed ${fileAnalyses.size} file(s)",
                 TraceType.INFO
             )
 
-            val patchPrompt = buildPatchPrompt(userText, evidence, basePath, analysis)
+            val patchPrompt = buildPatchPrompt(userText, basePath, fileAnalyses)
 
             val patchMessages = listOf(
                 ChatMessage(ChatRole.USER, patchPrompt)
             )
 
+            val baseTokens = 900
+            val perFileTokens = 400
+            val scaledTokens = baseTokens + (fileAnalyses.size * perFileTokens)
+
             val patchConfig = config.copy(
                 temperature = 0.0,
-                maxTokens = 900
+                maxTokens = scaledTokens
             )
+
+            val mergedAnalysis = mergeAnalyses(fileAnalyses)
 
             val raw1 = chatRepository.chat(patchConfig, patchMessages)
             val patch1 = PatchParser.parseOrNull(raw1)
 
             if (patch1 != null && patch1.files.isNotEmpty()) {
-                val issues = ConsistencyChecker.check(analysis, raw1)
+                val issues = ConsistencyChecker.check(mergedAnalysis, raw1)
                 appendConsistencyTrace(issues, trace)
 
                 if (issues.any { it.kind == com.markolukarami.copilotclone.domain.entities.code.IssueKind.RETURN_MISMATCH }) {
                     trace += TraceStep("Consistency fix", "Re-prompting for return type mismatch", TraceType.MODEL)
-                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, analysis, trace)
+                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, mergedAnalysis, trace)
                     if (fixResult != null) return fixResult
                 }
 
@@ -245,12 +271,12 @@ $contextBlock
             val patch2 = PatchParser.parseOrNull(raw2)
 
             if (patch2 != null && patch2.files.isNotEmpty()) {
-                val issues = ConsistencyChecker.check(analysis, raw2)
+                val issues = ConsistencyChecker.check(mergedAnalysis, raw2)
                 appendConsistencyTrace(issues, trace)
 
                 if (issues.any { it.kind == com.markolukarami.copilotclone.domain.entities.code.IssueKind.RETURN_MISMATCH }) {
                     trace += TraceStep("Consistency fix", "Re-prompting for return type mismatch", TraceType.MODEL)
-                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, analysis, trace)
+                    val fixResult = attemptConsistencyFix(patchConfig, patchPrompt, issues, mergedAnalysis, trace)
                     if (fixResult != null) return fixResult
                 }
 
@@ -309,6 +335,19 @@ $contextBlock
 
         val answer = chatRepository.chat(config, finalMessages)
         return ChatResult(answer, trace, patch = null)
+    }
+
+    private fun mergeAnalyses(entries: List<FileAnalysisEntry>): CodeAnalysis {
+        if (entries.isEmpty()) return CodeAnalysis(targetFilePath = "")
+        if (entries.size == 1) return entries.first().analysis
+
+        return CodeAnalysis(
+            targetFilePath = entries.first().analysis.targetFilePath,
+            imports = entries.flatMap { it.analysis.imports }.distinct(),
+            methods = entries.flatMap { it.analysis.methods }.distinctBy { it.name },
+            fields = entries.flatMap { it.analysis.fields }.distinctBy { it.name },
+            similarMethods = entries.flatMap { it.analysis.similarMethods }.distinctBy { it.name }
+        )
     }
 
     private fun guessMethodName(userText: String): String? {

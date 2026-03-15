@@ -8,7 +8,7 @@ import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 
 class Strategist(
     private val maxSnippets: Int = 8,
-    private val maxFileChars: Int = 1500,
+    private val maxFileChars: Int = 3000,
     private val maxFiles: Int = 5
 ) {
     data class SelectedEvidence(

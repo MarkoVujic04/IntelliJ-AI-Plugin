@@ -52,6 +52,7 @@ object ChatWiring {
             project = project,
             agentsMdService = agentsMdService,
             codeInspector = codeInspector,
+            chatSessionRepository = chatSessionRepo,
         )
 
         val pipeline = AgentPipelineUseCase(

@@ -11,6 +11,7 @@ import com.markolukarami.copilotclone.domain.entities.code.ConsistencyIssue
 import com.markolukarami.copilotclone.domain.entities.trace.TraceStep
 import com.markolukarami.copilotclone.domain.entities.trace.TraceType
 import com.markolukarami.copilotclone.domain.repositories.ChatRepository
+import com.markolukarami.copilotclone.domain.repositories.ChatSessionRepository
 import com.markolukarami.copilotclone.domain.repositories.EditorContextRepository
 import com.markolukarami.copilotclone.frameworks.editor.CodeInspector
 import com.markolukarami.copilotclone.frameworks.editor.ConsistencyChecker
@@ -22,7 +23,13 @@ class Executor(
     private val project: Project,
     private val agentsMdService: AgentsMdService,
     private val codeInspector: CodeInspector,
+    private val chatSessionRepository: ChatSessionRepository,
 ) {
+
+    companion object {
+        private const val MAX_HISTORY_CHARS = 4000
+        private const val MAX_HISTORY_TURNS = 10
+    }
 
     private fun isPatchRequest(userText: String): Boolean {
         val t = userText.lowercase()
@@ -47,7 +54,8 @@ class Executor(
     private fun buildPatchPrompt(
         userText: String,
         projectBasePath: String,
-        fileAnalyses: List<FileAnalysisEntry>
+        fileAnalyses: List<FileAnalysisEntry>,
+        conversationHistory: String? = null
     ): String {
         val agents = agentsMdService.getInstructionsOrNull()
 
@@ -164,6 +172,7 @@ If the request is about adding a statement "after X" or "at the end":
 - still use REWRITE_METHOD and place it correctly inside the method.
 
 $similarBlock
+${conversationHistory ?: ""}
 USER REQUEST:
 $userText
 
@@ -232,13 +241,23 @@ ${fileBlocks.joinToString("\n")}
                 TraceType.INFO
             )
 
-            val patchPrompt = buildPatchPrompt(userText, basePath, fileAnalyses)
+            val history = getRecentHistory()
+            val historySummary = buildHistorySummary(history)
+
+            if (history.isNotEmpty()) {
+                trace += TraceStep(
+                    "Conversation memory",
+                    "Included ${history.size} message(s) from history",
+                    TraceType.INFO
+                )
+            }
+
+            val patchPrompt = buildPatchPrompt(userText, basePath, fileAnalyses, historySummary)
 
             val patchMessages = listOf(
                 ChatMessage(ChatRole.USER, patchPrompt)
             )
 
-            // Auto-scale maxTokens based on model context window + prompt size, or use user override
             val computedMaxTokens = ModelTokenEstimator.compute(
                 userOverride = config.maxResponseTokens,
                 modelName = config.model,
@@ -353,10 +372,53 @@ ${fileBlocks.joinToString("\n")}
             )
         }
 
+        val normalHistory = getRecentHistory()
+        if (normalHistory.isNotEmpty()) {
+            finalMessages += normalHistory
+            trace += TraceStep(
+                "Conversation memory",
+                "Included ${normalHistory.size} message(s) from history",
+                TraceType.INFO
+            )
+        }
+
         finalMessages += ChatMessage(ChatRole.USER, userText)
 
         val answer = chatRepository.chat(config, finalMessages)
         return ChatResult(answer, trace, patch = null)
+    }
+
+    private fun getRecentHistory(): List<ChatMessage> {
+        val sessionId = chatSessionRepository.getActiveSessionId()
+        val all = chatSessionRepository.getMessages(sessionId)
+        if (all.isEmpty()) return emptyList()
+
+        val recentMessages = all.takeLast(MAX_HISTORY_TURNS * 2)
+
+        val trimmed = mutableListOf<ChatMessage>()
+        var totalChars = 0
+        for (msg in recentMessages.reversed()) {
+            if (totalChars + msg.content.length > MAX_HISTORY_CHARS) break
+            trimmed.add(0, msg)
+            totalChars += msg.content.length
+        }
+        return trimmed
+    }
+
+    private fun buildHistorySummary(history: List<ChatMessage>): String? {
+        if (history.isEmpty()) return null
+        val lines = history.joinToString("\n") { msg ->
+            val role = when (msg.role) {
+                ChatRole.USER -> "User"
+                ChatRole.ASSISTANT -> "Assistant"
+                ChatRole.SYSTEM -> "System"
+            }
+            "$role: ${msg.content.take(300)}"
+        }
+        return """
+CONVERSATION HISTORY (recent):
+$lines
+"""
     }
 
     private fun mergeAnalyses(entries: List<FileAnalysisEntry>): CodeAnalysis {

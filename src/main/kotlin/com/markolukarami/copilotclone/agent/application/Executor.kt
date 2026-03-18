@@ -16,6 +16,11 @@ import com.markolukarami.copilotclone.domain.repositories.EditorContextRepositor
 import com.markolukarami.copilotclone.frameworks.editor.CodeInspector
 import com.markolukarami.copilotclone.frameworks.editor.ConsistencyChecker
 import com.markolukarami.copilotclone.frameworks.instructions.AgentsMdService
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class Executor(
     private val chatRepository: ChatRepository,
@@ -208,38 +213,51 @@ ${fileBlocks.joinToString("\n")}
             val basePath = project.basePath ?: ""
             val baseNorm = basePath.replace('\\', '/').trimEnd('/') + "/"
 
-            val fileAnalyses = evidence.files.mapNotNull { file ->
-                val absPath = file.filePath.replace('\\', '/').trim()
-                if (absPath.isBlank()) return@mapNotNull null
-                val rel = absPath.removePrefix(baseNorm)
+            val fileAnalyses: List<FileAnalysisEntry> = run {
+                val startTime = System.currentTimeMillis()
+                val parallelTraces = ConcurrentLinkedQueue<TraceStep>()
 
-                trace += TraceStep("Pre-gen analysis", "Inspecting $rel", TraceType.TOOL)
+                val results = runBlocking {
+                    evidence.files.map { file ->
+                        async(Dispatchers.Default) {
+                            val absPath = file.filePath.replace('\\', '/').trim()
+                            if (absPath.isBlank()) return@async null
+                            val rel = absPath.removePrefix(baseNorm)
 
-                val analysis = codeInspector.analyze(absPath)
+                            parallelTraces += TraceStep("Pre-gen analysis", "Inspecting $rel", TraceType.TOOL)
 
+                            val analysis = codeInspector.analyze(absPath)
+
+                            parallelTraces += TraceStep(
+                                "Analysis: $rel",
+                                "methods=${analysis.methods.size}, fields=${analysis.fields.size}, " +
+                                        "imports=${analysis.imports.size}",
+                                TraceType.INFO
+                            )
+
+                            FileAnalysisEntry(
+                                relativePath = rel,
+                                content = file.content,
+                                analysis = analysis
+                            )
+                        }
+                    }.awaitAll().filterNotNull()
+                }
+
+                val elapsed = System.currentTimeMillis() - startTime
+                trace += parallelTraces
                 trace += TraceStep(
-                    "Analysis: $rel",
-                    "methods=${analysis.methods.size}, fields=${analysis.fields.size}, " +
-                            "imports=${analysis.imports.size}",
+                    "Parallel analysis",
+                    "Analyzed ${results.size} file(s) in ${elapsed}ms",
                     TraceType.INFO
                 )
-
-                FileAnalysisEntry(
-                    relativePath = rel,
-                    content = file.content,
-                    analysis = analysis
-                )
+                results
             }
 
             if (fileAnalyses.isEmpty()) {
                 trace += TraceStep("Pre-gen analysis", "No files available for analysis", TraceType.ERROR)
             }
 
-            trace += TraceStep(
-                "Multi-file analysis",
-                "Analyzed ${fileAnalyses.size} file(s)",
-                TraceType.INFO
-            )
 
             val history = getRecentHistory()
             val historySummary = buildHistorySummary(history)

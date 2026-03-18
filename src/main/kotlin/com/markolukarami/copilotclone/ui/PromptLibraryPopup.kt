@@ -13,6 +13,7 @@ import com.markolukarami.copilotclone.domain.repositories.PromptRepository
 import com.markolukarami.copilotclone.frameworks.prompts.PromptLibraryState
 import java.awt.BorderLayout
 import java.awt.Component
+import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.DefaultListModel
@@ -112,6 +113,7 @@ object PromptLibraryPopup {
         }
 
         val panel = JPanel(BorderLayout(8, 8)).apply {
+            preferredSize = Dimension(420, 350)
             add(JBScrollPane(list), BorderLayout.CENTER)
             add(
                 JPanel().apply {

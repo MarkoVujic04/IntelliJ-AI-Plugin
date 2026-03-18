@@ -14,6 +14,7 @@ import com.markolukarami.copilotclone.domain.repositories.UserContextRepository
 import com.markolukarami.copilotclone.frameworks.editor.UserContextState
 import com.markolukarami.copilotclone.ui.components.ContextListItem
 import java.awt.BorderLayout
+import java.awt.Dimension
 import javax.swing.DefaultListModel
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -56,6 +57,7 @@ class ContextManagerDialog(
     }
 
     val component: JComponent = JPanel(BorderLayout()).apply {
+        preferredSize = Dimension(500, 400)
         add(JBScrollPane(list), BorderLayout.CENTER)
         add(buildButtons(), BorderLayout.SOUTH)
     }
